@@ -2,16 +2,15 @@
   "name": "graphql-ops-proxy",
   "author": "IlijaNL",
   "version": "0.0.0",
-  "types": "dist/index.d.ts",
-  "module": "dist/index.mjs",
-  "main": "dist/index.js",
+  "types": "lib/index.d.ts",
+  "main": "lib/index.js",
   "files": [
-    "./dist",
+    "./lib",
     "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ilijaNL/pg-tbus.git"
+    "url": "git+https://github.com/ilijaNL/graphql-ops-proxy.git"
   },
   "keywords": [
     "graphql",
@@ -26,7 +25,8 @@
   },
   "homepage": "https://github.com/ilijaNL/graphql-ops-proxy#readme",
   "scripts": {
-    "build": "tsup ./src/index.ts --format cjs,esm --dts",
+    "build": "tsc",
+    "dev": "tsc --watch",
     "tc": "tsc --noEmit",
     "ci:publish": "yarn build && changeset publish",
     "test": "tap --ts --no-check-coverage  tests/*.test.ts",
@@ -50,6 +50,7 @@
     "eslint": "^8.4.1",
     "eslint-config-prettier": "^8.4.0",
     "next": "^13.2.4",
+    "node-mocks-http": "^1.12.2",
     "tap": "^16.3.4",
     "ts-node": "^10.7.0",
     "tsup": "^6.6.0",
@@ -57,9 +58,32 @@
     "undici": "^5.21.0"
   },
   "dependencies": {
+    "@graphql-typed-document-node/core": "^3.2.0",
     "async-cache-dedupe": "^1.10.2",
     "graphql": "^16.6.0",
-    "@graphql-typed-document-node/core": "^3.2.0",
     "safe-stable-stringify": "^2.4.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "require": "./lib/index.js",
+      "import": "./lib/index.js"
+    },
+    "./lib/hasura": {
+      "types": "./lib/hasura.d.ts",
+      "require": "./lib/hasura.js",
+      "import": "./lib/hasura.js"
+    },
+    "./lib/nextjs": {
+      "types": "./lib/nextjs.d.ts",
+      "require": "./lib/nextjs.js",
+      "import": "./lib/nextjs.js"
+    },
+    "./lib/node": {
+      "types": "./lib/node.d.ts",
+      "require": "./lib/node.js",
+      "import": "./lib/node.js"
+    },
+    "./package.json": "./package.json"
   }
 }

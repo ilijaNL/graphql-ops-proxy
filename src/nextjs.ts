@@ -1,8 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
 import { createRequestPool, withCache } from './node';
 import { createGraphqlProxy, NotFoundError, THeaders, ValidationError } from './proxy';
 
 // types imports
+import type { NextApiRequest, NextApiResponse } from 'next';
 import type { ServerResponse } from 'http';
 import type { Pool } from 'undici';
 import type { GraphqlProxy, RequestFn } from './proxy';
@@ -36,7 +36,7 @@ export function createNextHandler(
     /**
      * Should it use @async dedupe cache?
      */
-    withCache: boolean | CacheOptions;
+    withCache: boolean | Partial<CacheOptions>;
     /**
      * Should it validate all operations against schema. It is recommended to turn it on when extending schema
      */
@@ -70,11 +70,21 @@ export function createNextHandler(
     }
   }
 
+  // what is a better location?
   if (options?.validate) {
     validateOps();
   }
 
+  function sendNotFound(res: NextApiResponse, message: string) {
+    return res.status(404).send({
+      message: message,
+    });
+  }
   async function _request(data: { operation: string; variables: any; headers: THeaders }, res: NextApiResponse) {
+    if (!data.operation || typeof data.operation !== 'string') {
+      return sendNotFound(res, 'no operation defined');
+    }
+
     try {
       const { response, headers } = await proxy.request(data.operation, data.variables, data.headers);
 
@@ -83,11 +93,13 @@ export function createNextHandler(
       return res.send(response);
     } catch (e: unknown) {
       if (e instanceof NotFoundError) {
-        return res.status(404).send(e.message);
+        return sendNotFound(res, e.message);
       }
 
       if (e instanceof ValidationError) {
-        return res.status(400).send(e.message);
+        return res.status(400).send({
+          message: e.message,
+        });
       }
 
       return res.status(500).send((e as Error).message ?? 'internal error');
@@ -97,23 +109,22 @@ export function createNextHandler(
   return async function handle(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === 'POST') {
       const { op, v } = req.body;
-      if (!op || typeof op !== 'string') {
-        return res.status(404).send(op + 'not found');
-      }
 
       return _request({ operation: op, variables: v, headers: req.headers }, res);
     }
 
     if (req.method === 'GET') {
       const op = req.query['op'];
-      if (!op || typeof op !== 'string') {
-        return res.status(404).send(op + 'not found');
-      }
-      const variables = req.query['v'] ? JSON.parse(req.query['v'] as string) : undefined;
 
-      return _request({ headers: req.headers, operation: op, variables }, res);
+      const variables = req.query['v']
+        ? typeof req.query['v'] === 'object'
+          ? req.query['v']
+          : JSON.parse(req.query['v'] as string)
+        : undefined;
+
+      return _request({ headers: req.headers, operation: op as string, variables }, res);
     }
 
-    return res.status(404).send('not found');
+    return sendNotFound(res, 'not-found');
   };
 }

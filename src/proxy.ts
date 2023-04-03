@@ -160,6 +160,8 @@ export function createGraphqlProxy(
     });
 
     // remove forbidden headers
+    // not sure if we should delete this header
+    delete headers.host;
     delete headers.connection;
     delete headers['transfer-encoding'];
     // ensure we always return json
