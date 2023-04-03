@@ -1,0 +1,13 @@
+"""
+Whenever this query should be cached on proxy
+Important to keep this
+"""
+directive @pcached(ttl: Int!) on QUERY
+
+type Query {
+  __health: Boolean!
+}
+
+type Mutation {
+  noop: Boolean!
+}
