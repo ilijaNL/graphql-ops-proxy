@@ -2,7 +2,7 @@ import tap from 'tap';
 import { createMocks } from 'node-mocks-http';
 import { createNextHandler } from '../src/nextjs';
 import { print, parse } from 'graphql';
-import { TypedOperation } from '../src/proxy';
+import { TypedOperation, copyHeaders } from '../src/proxy';
 
 tap.test('happy post', async (t) => {
   const handler = createNextHandler(
@@ -14,7 +14,6 @@ tap.test('happy post', async (t) => {
         t.same(JSON.parse(body).query, 'query test1 { test }');
         t.same(headers, {
           'x-hasura-app': 'app',
-          'content-length': 32,
           'content-type': 'application/json',
         });
         return {
@@ -95,7 +94,6 @@ tap.test('happy get', async (t) => {
         t.same(JSON.parse(body).query, 'query test1 { test }');
         t.same(headers, {
           'x-hasura-app': 'app',
-          'content-length': 47,
           'content-type': 'application/json',
         });
         return {
@@ -177,7 +175,7 @@ tap.test('on create + input validation', async (t) => {
   const opsMap = {
     hash1: 'query test1 { test }',
   };
-  const queryDoc = new TypedOperation<{ me: number }, { var1: number }>('test1', 'query');
+  const queryDoc: TypedOperation<{ me: number }, { var1: number }> = { operation: 'test1', operationType: 'query' };
 
   const handler = createNextHandler(
     new URL('http://localhost:3001/api/graphql'),
@@ -229,6 +227,57 @@ tap.test('on create + input validation', async (t) => {
   t.equal(res._getStatusCode(), 400);
   t.same(res._getData(), {
     message: 'var 1 is not a number',
+  });
+});
+
+tap.test('response headers', async (t) => {
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      resultHeaders(proxyHeaders) {
+        return copyHeaders(proxyHeaders ?? {}, ['x-includes']);
+      },
+      request: async ({ body, headers }) => {
+        t.same(JSON.parse(body).query, 'query test1 { test }');
+        t.same(headers, {
+          'x-hasura-app': 'app',
+          'content-type': 'application/json',
+        });
+        return {
+          headers: {
+            'x-includes': '123',
+            'x-excludes': 'excludes',
+          },
+          response: {
+            data: {
+              test: '123',
+            },
+          },
+        };
+      },
+    }
+  );
+
+  const { req, res } = createMocks({
+    method: 'POST',
+    headers: {
+      'x-hasura-app': 'app',
+    },
+    body: {
+      op: 'test1',
+    },
+  });
+
+  await handler(req, res);
+
+  t.equal(res._getStatusCode(), 200);
+  t.same(res.getHeaders(), { 'x-includes': '123' });
+  t.same(res._getData(), {
+    data: {
+      test: '123',
+    },
   });
 });
 

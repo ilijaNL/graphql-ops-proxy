@@ -2,15 +2,11 @@ import type { GraphQLError } from 'graphql';
 
 export type OperationType = 'query' | 'mutation' | 'subscription';
 
-export class TypedOperation<Result = Record<string, any>, Variables = Record<string, any>> {
-  /**
-   * This type is used to ensure that the variables you pass in to the query are assignable to Variables
-   * and that the Result is assignable to whatever you pass your result to. The method is never actually
-   * implemented, but the type is valid because we list it as optional
-   */
-  __apiType?: (variables: Variables) => Result;
-  constructor(public readonly operation: string, public readonly operationType: OperationType) {}
-}
+export type TypedOperation<R = any, V = any> = {
+  operation: string;
+  operationType: OperationType;
+  __apiType?: (v: V) => R;
+};
 
 export type GeneratedOperation = {
   operationName: string;
@@ -28,22 +24,11 @@ export type RemoteRequestProps = {
   headers: THeaders;
 };
 
-export type THeaders = Record<string, string | string[] | undefined>;
+export type THeaders = Record<string, string>;
 
 export type ProxyResponse = { response: any; headers?: THeaders };
 
 export type RequestFn = (props: { body: string; headers: Record<string, string> }) => Promise<ProxyResponse>;
-
-export type CacheOptions = {
-  /**
-   * Global TTL cache in seconds, use @pcached directive for per operation caching
-   */
-  cacheTTL: number;
-  /**
-   * Calculate the key
-   */
-  cacheKeySerialize: (props: RemoteRequestProps & { operation: string }) => string;
-};
 
 export interface IValidationError {
   type: 'validation';
@@ -97,10 +82,6 @@ export class OpsDef {
     return this.mOperation;
   }
 
-  get document() {
-    return this.mDocument;
-  }
-
   get query() {
     return this.mQuery;
   }
@@ -136,7 +117,7 @@ export class OpsDef {
   }
 }
 
-function copyHeaders(originalHeaders: Record<string, unknown>, toCopy: string[]) {
+export function copyHeaders(originalHeaders: Record<string, unknown>, toCopy: string[]) {
   const result: THeaders = {};
   Object.keys(originalHeaders).forEach((key) => {
     if (toCopy.indexOf(key) !== -1) {
@@ -146,13 +127,13 @@ function copyHeaders(originalHeaders: Record<string, unknown>, toCopy: string[])
   return result;
 }
 
+export const defaultHeaderCopy = (proxyHeaders?: THeaders | undefined) => {
+  return copyHeaders(proxyHeaders ?? {}, ['content-encoding', 'content-type']);
+};
+
 export type GraphqlProxy = ReturnType<typeof createGraphqlProxy>;
 
-export function createGraphqlProxy(
-  operations: Array<GeneratedOperation>,
-  request: RequestFn,
-  introspectionHeaders: THeaders = {}
-) {
+export function createGraphqlProxy(operations: Array<GeneratedOperation>, request: RequestFn) {
   async function _requestRemote(props: RemoteRequestProps): Promise<ProxyResponse> {
     const requestBody = {
       query: props.query,
@@ -163,34 +144,26 @@ export function createGraphqlProxy(
 
     const headers = Object.assign({
       ...props.headers,
-      'content-length': Buffer.byteLength(bodyPayload),
+      // always expect json
       'content-type': 'application/json',
     });
 
     // remove forbidden headers
-    // not sure if we should delete this header
-    delete headers.host;
+    delete headers.host; // not sure if we should delete this header
     delete headers.connection;
     delete headers['transfer-encoding'];
-    // ensure we always return json
-    // delete headers['accept-encoding'];
 
-    const { headers: _responseHeaders, response } = await request({
+    return await request({
       body: bodyPayload,
       headers: headers,
     });
-
-    return {
-      response: response,
-      headers: copyHeaders(_responseHeaders ?? {}, ['content-encoding', 'content-type']),
-    };
   }
 
   const opsMap = new Map<string, OpsDef>();
 
   operations.forEach((oper) => {
     const def = new OpsDef(
-      new TypedOperation(oper.operationName, oper.operationType),
+      { operation: oper.operationName, operationType: oper.operationType },
       oper.query,
       _requestRemote,
       oper.behaviour
@@ -201,10 +174,8 @@ export function createGraphqlProxy(
 
   // only wrap queries with cache
 
-  function getOperation(document: TypedOperation<any, any>) {
-    const name = document.operation;
-
-    const doc = opsMap.get(name);
+  function getOperation(operation: string) {
+    const doc = opsMap.get(operation);
     /* istanbul ignore next */
     if (!doc) {
       throw new Error('no document registered for ' + name);
@@ -220,7 +191,7 @@ export function createGraphqlProxy(
      *
      * Should be called after all overrides are added
      */
-    async validate() {
+    async validate(introspectionHeaders: THeaders = {}) {
       // fetch introspection
       const ops = Array.from(opsMap.values());
       // filter out custom executions
@@ -240,8 +211,6 @@ export function createGraphqlProxy(
         query: query,
         headers: {
           ...introspectionHeaders,
-          // only accept json
-          ['accept-encoding']: undefined,
         },
       });
 
@@ -254,8 +223,7 @@ export function createGraphqlProxy(
 
       return errors;
     },
-    // close all undici connections
-
+    getOperation,
     getOperations() {
       return Array.from(opsMap.values());
     },
@@ -263,22 +231,22 @@ export function createGraphqlProxy(
      * Add input validation for an operation
      */
     addValidation<V>(document: TypedOperation<any, V>, validate: ValidateFn<V>) {
-      const ops = getOperation(document);
+      const ops = getOperation(document.operation);
       ops.setValidate(validate);
     },
     /**
      * Add an operation override. Can be used to implement custom operations
      */
     addOverride<R, V>(document: TypedOperation<R, V>, handler: CustomHandlerFn<R, V>) {
-      const ops = getOperation(document);
+      const ops = getOperation(document.operation);
       ops.setCustomHandler(handler);
     },
     /**
-     * Directly call hasura without any validation, caching or overrides
+     * Directly call proxy without any validation, caching or overrides
      */
-    async rawRequest(query: string, variables: Record<string, unknown> | undefined, headers: THeaders) {
-      return _requestRemote({ headers, query, variables });
-    },
+    // async rawRequest(query: string, variables: Record<string, unknown> | undefined, headers: THeaders) {
+    //   return _requestRemote({ headers, query, variables });
+    // },
 
     /**
      * Send a request

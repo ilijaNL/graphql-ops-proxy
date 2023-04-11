@@ -3,7 +3,7 @@ import { MockAgent } from 'undici';
 import tap from 'tap';
 import { TypedOperation, createGraphqlProxy } from '../src/proxy';
 
-const queryDoc = new TypedOperation<{ me: number }, { var1: string }>('operation', 'query');
+const queryDoc: TypedOperation<{ me: number }, { var1: string }> = { operation: 'operation', operationType: 'query' };
 
 tap.test('dedupes remote', async (t) => {
   const agent = new MockAgent();

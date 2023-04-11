@@ -112,7 +112,7 @@ tap.test('validates', async (t) => {
     async () => ({ headers: {}, response: null })
   );
 
-  const op = new TypedOperation('operation', 'query');
+  const op: TypedOperation = { operation: 'operation', operationType: 'query' };
 
   proxy.addOverride(op, async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));

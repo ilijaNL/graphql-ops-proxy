@@ -47,18 +47,18 @@
     "@types/tap": "^15.0.8",
     "ajv": "^8.12.0",
     "ajv-formats": "^2.1.1",
+    "async-cache-dedupe": "^1.10.2",
     "eslint": "^8.4.1",
     "eslint-config-prettier": "^8.4.0",
+    "graphql": "^16.6.0",
     "next": "^13.2.4",
     "node-mocks-http": "^1.12.2",
+    "safe-stable-stringify": "^2.4.3",
     "tap": "^16.3.4",
     "ts-node": "^10.7.0",
     "tsup": "^6.6.0",
     "typescript": "^4.9.0",
-    "undici": "^5.21.0",
-    "async-cache-dedupe": "^1.10.2",
-    "graphql": "^16.6.0",
-    "safe-stable-stringify": "^2.4.3"
+    "undici": "^5.21.0"
   },
   "exports": {
     ".": {
@@ -75,6 +75,11 @@
       "types": "./lib/nextjs.d.ts",
       "require": "./lib/nextjs.js",
       "import": "./lib/nextjs.js"
+    },
+    "./lib/edge": {
+      "types": "./lib/edge.d.ts",
+      "require": "./lib/edge.js",
+      "import": "./lib/edge.js"
     },
     "./lib/node": {
       "types": "./lib/node.d.ts",

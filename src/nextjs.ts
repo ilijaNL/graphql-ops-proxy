@@ -1,5 +1,12 @@
 import { createRequestPool, withCache } from './node';
-import { createGraphqlProxy, NotFoundError, THeaders, ValidationError, GeneratedOperation } from './proxy';
+import {
+  createGraphqlProxy,
+  NotFoundError,
+  THeaders,
+  ValidationError,
+  GeneratedOperation,
+  defaultHeaderCopy,
+} from './proxy';
 
 // types imports
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -47,6 +54,13 @@ export function createNextHandler(
      * @returns
      */
     onCreate: (proxy: GraphqlProxy) => void;
+
+    /**
+     * Default only copies ['content-encoding', 'content-type'] headers
+     * @param proxyHeaders
+     * @returns
+     */
+    resultHeaders: typeof defaultHeaderCopy;
   }>
 ) {
   let proxy: GraphqlProxy;
@@ -56,6 +70,8 @@ export function createNextHandler(
     const requestPool = createRequestPool(url, options?.request);
     proxy = createGraphqlProxy(operations, requestPool.request);
   }
+
+  const toResultHeaders = options?.resultHeaders ?? defaultHeaderCopy;
 
   options?.onCreate?.(proxy);
 
@@ -88,7 +104,7 @@ export function createNextHandler(
     try {
       const { response, headers } = await proxy.request(data.operation, data.variables, data.headers);
 
-      headers && setHeaders(headers, res);
+      setHeaders(toResultHeaders(headers), res);
 
       return res.send(response);
     } catch (e: unknown) {
@@ -107,10 +123,11 @@ export function createNextHandler(
   }
 
   return async function handle(req: NextApiRequest, res: NextApiResponse) {
+    const headers = req.headers as THeaders;
     if (req.method === 'POST') {
       const { op, v } = req.body;
 
-      return _request({ operation: op, variables: v, headers: req.headers }, res);
+      return _request({ operation: op, variables: v, headers: headers }, res);
     }
 
     if (req.method === 'GET') {
@@ -122,7 +139,7 @@ export function createNextHandler(
           : JSON.parse(req.query['v'] as string)
         : undefined;
 
-      return _request({ headers: req.headers, operation: op as string, variables }, res);
+      return _request({ headers: headers, operation: op as string, variables }, res);
     }
 
     return sendNotFound(res, 'not-found');
