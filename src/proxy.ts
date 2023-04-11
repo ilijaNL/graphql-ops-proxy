@@ -1,5 +1,3 @@
-import type { GraphQLError } from 'graphql';
-
 export type OperationType = 'query' | 'mutation' | 'subscription';
 
 export type TypedOperation<R = any, V = any> = {
@@ -178,51 +176,14 @@ export function createGraphqlProxy(operations: Array<GeneratedOperation>, reques
     const doc = opsMap.get(operation);
     /* istanbul ignore next */
     if (!doc) {
-      throw new Error('no document registered for ' + name);
+      throw new Error('no document registered for ' + operation);
     }
 
     return doc;
   }
 
   return {
-    /**
-     * Validate all operations against hasura and custom overrides, throws if some operations are not valid
-     * This is useful to check during development if all documents are valid or have custom execute
-     *
-     * Should be called after all overrides are added
-     */
-    async validate(introspectionHeaders: THeaders = {}) {
-      // fetch introspection
-      const ops = Array.from(opsMap.values());
-      // filter out custom executions
-      const opsToCheck = ops.filter((o) => !o.customHandler);
-
-      // lazy load graphql
-      const { getIntrospectionQuery, buildClientSchema, validate, parse } = await import('graphql');
-
-      if (opsToCheck.length === 0) {
-        return [];
-      }
-
-      // fetch introspection query
-      const query = getIntrospectionQuery();
-      // validate
-      const { response } = await _requestRemote({
-        query: query,
-        headers: {
-          ...introspectionHeaders,
-        },
-      });
-
-      const schema = buildClientSchema(response.data);
-
-      const errors = opsToCheck.reduce((agg, curr) => {
-        const errs = validate(schema, parse(curr.query));
-        return [...agg, ...errs];
-      }, [] as GraphQLError[]);
-
-      return errors;
-    },
+    rawRequest: _requestRemote,
     getOperation,
     getOperations() {
       return Array.from(opsMap.values());

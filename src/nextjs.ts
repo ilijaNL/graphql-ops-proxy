@@ -14,6 +14,7 @@ import type { ServerResponse } from 'http';
 import type { Pool } from 'undici';
 import type { GraphqlProxy, RequestFn } from './proxy';
 import type { CacheOptions } from './node';
+import { validateProxy } from './utils';
 
 function setHeaders(headers: THeaders, res: ServerResponse) {
   Object.entries(headers).forEach(([key, value]) => {
@@ -46,8 +47,9 @@ export function createNextHandler(
     withCache: boolean | Partial<CacheOptions>;
     /**
      * Should it validate all operations against schema. It is recommended to turn it on when extending schema
+     *
      */
-    validate: boolean;
+    validate: boolean | THeaders;
     /**
      * Can be used to add overrides or do other manu
      * @param proxy
@@ -80,7 +82,7 @@ export function createNextHandler(
   }
 
   async function validateOps() {
-    const errors = await proxy.validate();
+    const errors = await validateProxy(proxy, typeof options?.validate === 'object' ? options?.validate : {});
     if (errors.length) {
       throw new Error(errors.map((e) => e.message).join(', '));
     }

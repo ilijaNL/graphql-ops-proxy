@@ -1,5 +1,6 @@
 import tap from 'tap';
 import { TypedOperation, createGraphqlProxy } from '../src/proxy';
+import { validateProxy } from '../src/utils';
 import { Type, TSchema, Static } from '@sinclair/typebox';
 import { makeExecutableSchema } from '@graphql-tools/schema';
 import { addMocksToSchema } from '@graphql-tools/mock';
@@ -46,7 +47,7 @@ const schemaWithMocks = addMocksToSchema({ schema });
 
 tap.test('happy', async (t) => {
   const proxy = createGraphqlProxy([], async () => ({ headers: {}, response: null }));
-  const errors = await proxy.validate();
+  const errors = await validateProxy(proxy);
 
   t.same(errors, []);
 });
@@ -66,7 +67,7 @@ tap.test('return errors when not all operations are implemented', async (t) => {
       };
     }
   );
-  const errors = await proxy.validate();
+  const errors = await validateProxy(proxy);
 
   t.equal(errors[0]?.message, 'Cannot query field "me" on type "Query".');
 });

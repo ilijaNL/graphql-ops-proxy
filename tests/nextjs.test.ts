@@ -9,7 +9,6 @@ tap.test('happy post', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       request: async ({ body, headers }) => {
         t.same(JSON.parse(body).query, 'query test1 { test }');
         t.same(headers, {
@@ -52,7 +51,6 @@ tap.test('only accept post/get', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       request: async ({ body, headers }) => {
         return {
           response: {
@@ -89,7 +87,6 @@ tap.test('happy get', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       request: async ({ body, headers }) => {
         t.same(JSON.parse(body).query, 'query test1 { test }');
         t.same(headers, {
@@ -133,7 +130,6 @@ tap.test('not found', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       request: async ({ body, headers }) => {
         t.same(JSON.parse(body).query, 'query test1 { test }');
         t.same(headers, {
@@ -181,7 +177,6 @@ tap.test('on create + input validation', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       onCreate(proxy) {
         proxy.addValidation(queryDoc, async function (input) {
           if (typeof input.var1 !== 'number') {
@@ -235,7 +230,6 @@ tap.test('response headers', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       resultHeaders(proxyHeaders) {
         return copyHeaders(proxyHeaders ?? {}, ['x-includes']);
       },
@@ -286,7 +280,6 @@ tap.test('cache', async (t) => {
     new URL('http://localhost:3001/api/graphql'),
     [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
     {
-      validate: false,
       withCache: {
         cacheTTL: 1,
       },

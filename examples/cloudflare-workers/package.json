@@ -1,0 +1,26 @@
+{
+  "name": "cloudflare-workers",
+  "private": true,
+  "version": "0.0.1",
+  "main": "src/index.ts",
+  "scripts": {
+    "gen": "graphql-codegen",
+    "dev": "concurrently \"wrangler dev --local src/index.ts\" \"graphql-codegen --watch\"",
+    "build": "wrangler build"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "graphql-ops-proxy": "file:../.."
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20221111.1",
+    "@graphql-codegen/cli": "^3.3.0",
+    "@graphql-codegen/typescript": "^3.0.3",
+    "@graphql-codegen/typescript-operations": "^3.0.3",
+    "concurrently": "^8.0.1",
+    "esbuild": "^0.15.15",
+    "graphql": "^16.6.0",
+    "graphql-codegen-typed-operation": "^0.0.2",
+    "wrangler": "^2.4.4"
+  }
+}

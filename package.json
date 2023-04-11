@@ -66,11 +66,6 @@
       "require": "./lib/index.js",
       "import": "./lib/index.js"
     },
-    "./lib/hasura": {
-      "types": "./lib/hasura.d.ts",
-      "require": "./lib/hasura.js",
-      "import": "./lib/hasura.js"
-    },
     "./lib/nextjs": {
       "types": "./lib/nextjs.d.ts",
       "require": "./lib/nextjs.js",
@@ -85,6 +80,11 @@
       "types": "./lib/node.d.ts",
       "require": "./lib/node.js",
       "import": "./lib/node.js"
+    },
+    "./lib/utils": {
+      "types": "./lib/utils.d.ts",
+      "require": "./lib/utils.js",
+      "import": "./lib/utils.js"
     },
     "./package.json": "./package.json"
   }

@@ -1,6 +1,6 @@
 import undici, { Pool } from 'undici';
 import { IncomingHttpHeaders } from 'undici/types/header';
-import { getHasuraHeaders } from './hasura';
+import { getHasuraHeaders } from './utils';
 import { OpsDef, ProxyResponse, RemoteRequestProps, Resolver, THeaders } from './proxy';
 import { createCache, Cache } from 'async-cache-dedupe';
 import stableJson from 'safe-stable-stringify';

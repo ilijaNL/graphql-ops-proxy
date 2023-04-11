@@ -1,0 +1,7 @@
+query getCountry($countryCode: String!) @pcached(ttl: 20) {
+  country: countries(filter: { code: { eq: $countryCode } }) {
+    code
+    name
+    capital
+  }
+}
