@@ -1,16 +1,25 @@
-import { TypedDocumentNode } from '@graphql-typed-document-node/core';
-import {
-  DocumentNode,
-  getOperationAST,
-  parse,
-  validate,
-  getIntrospectionQuery,
-  GraphQLError,
-  buildClientSchema,
-  visit,
-  print,
-  OperationDefinitionNode,
-} from 'graphql';
+import type { GraphQLError } from 'graphql';
+
+export type OperationType = 'query' | 'mutation' | 'subscription';
+
+export class TypedOperation<Result = Record<string, any>, Variables = Record<string, any>> {
+  /**
+   * This type is used to ensure that the variables you pass in to the query are assignable to Variables
+   * and that the Result is assignable to whatever you pass your result to. The method is never actually
+   * implemented, but the type is valid because we list it as optional
+   */
+  __apiType?: (variables: Variables) => Result;
+  constructor(public readonly operation: string, public readonly operationType: OperationType) {}
+}
+
+export type GeneratedOperation = {
+  operationName: string;
+  operationType: 'query' | 'mutation' | 'subscription';
+  query: string;
+  behaviour: Partial<{
+    ttl: number;
+  }>;
+};
 
 export type RemoteRequestProps = {
   // used for the key
@@ -49,11 +58,11 @@ export type Resolver = (props: { variables?: Record<string, unknown>; headers: T
 export type CustomHandlerFn<R, V> = (this: OpsDef, variables: V, headers: THeaders) => Promise<R> | R;
 
 export class OpsDef {
-  private mQuery: string;
-  private mOperation: OperationDefinitionNode;
+  private mOperation: OperationType;
 
   constructor(
-    private mDocument: DocumentNode,
+    private mDocument: TypedOperation,
+    private readonly mQuery: string,
     public readonly request: (req: RemoteRequestProps) => Promise<ProxyResponse>,
     public readonly mBehaviour: Partial<{
       ttl: number;
@@ -62,8 +71,7 @@ export class OpsDef {
     private mCustomHandler: CustomHandlerFn<any, any> | null = null
   ) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    this.mOperation = getOperationAST(mDocument)!;
-    this.mQuery = print(mDocument);
+    this.mOperation = mDocument.operationType;
   }
 
   public setValidate(validate: ValidateFn<any> | null) {
@@ -86,20 +94,20 @@ export class OpsDef {
 
   get type() {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return this.mOperation.operation!;
+    return this.mOperation;
   }
 
   get document() {
     return this.mDocument;
   }
 
-  // get query() {
-  //   return this.mQuery;
-  // }
+  get query() {
+    return this.mQuery;
+  }
 
   get operationName() {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return this.mOperation.name!.value;
+    return this.mDocument.operation;
   }
 
   get customHandler() {
@@ -141,7 +149,7 @@ function copyHeaders(originalHeaders: Record<string, unknown>, toCopy: string[])
 export type GraphqlProxy = ReturnType<typeof createGraphqlProxy>;
 
 export function createGraphqlProxy(
-  operations: Record<string, string>,
+  operations: Array<GeneratedOperation>,
   request: RequestFn,
   introspectionHeaders: THeaders = {}
 ) {
@@ -180,64 +188,21 @@ export function createGraphqlProxy(
 
   const opsMap = new Map<string, OpsDef>();
 
-  Object.entries(operations).forEach(([, documentText]) => {
-    let doc = parse(documentText);
-    const operation = getOperationAST(doc);
-    if (!operation) {
-      throw new Error('could not retrieve operation from ' + documentText);
-    }
-    const type = operation.operation;
-    const name = operation.name?.value;
+  operations.forEach((oper) => {
+    const def = new OpsDef(
+      new TypedOperation(oper.operationName, oper.operationType),
+      oper.query,
+      _requestRemote,
+      oper.behaviour
+    );
 
-    /* istanbul ignore next */
-    if (!type || !name) {
-      throw new Error('could not retrieve operation type or name from ' + documentText);
-    }
-
-    let cacheTTL: number | undefined;
-
-    // find & remove all pcached directives
-    doc = visit(doc, {
-      Directive: {
-        enter(node) {
-          if (node.name.value === 'pcached') {
-            visit(node, {
-              Argument: {
-                enter(argNode) {
-                  /* istanbul ignore next */
-                  if (argNode.name.value !== 'ttl') {
-                    return;
-                  }
-                  visit(argNode, {
-                    IntValue: {
-                      enter(intNode) {
-                        cacheTTL = +intNode.value;
-                      },
-                    },
-                  });
-                },
-              },
-            });
-            // delete this node
-            return null;
-          }
-          return;
-        },
-      },
-    });
-
-    const def = new OpsDef(doc, _requestRemote, { ttl: cacheTTL });
-    opsMap.set(name, def);
+    opsMap.set(oper.operationName, def);
   });
 
   // only wrap queries with cache
 
-  function getOperation(document: any) {
-    const name = document['__meta__']?.['operation'];
-    /* istanbul ignore next */
-    if (!name) {
-      throw new Error('document has not a meta field with operation defined');
-    }
+  function getOperation(document: TypedOperation<any, any>) {
+    const name = document.operation;
 
     const doc = opsMap.get(name);
     /* istanbul ignore next */
@@ -261,6 +226,9 @@ export function createGraphqlProxy(
       // filter out custom executions
       const opsToCheck = ops.filter((o) => !o.customHandler);
 
+      // lazy load graphql
+      const { getIntrospectionQuery, buildClientSchema, validate, parse } = await import('graphql');
+
       if (opsToCheck.length === 0) {
         return [];
       }
@@ -280,7 +248,7 @@ export function createGraphqlProxy(
       const schema = buildClientSchema(response.data);
 
       const errors = opsToCheck.reduce((agg, curr) => {
-        const errs = validate(schema, curr.document);
+        const errs = validate(schema, parse(curr.query));
         return [...agg, ...errs];
       }, [] as GraphQLError[]);
 
@@ -294,14 +262,14 @@ export function createGraphqlProxy(
     /**
      * Add input validation for an operation
      */
-    addValidation<V>(document: TypedDocumentNode<any, V>, validate: ValidateFn<V>) {
+    addValidation<V>(document: TypedOperation<any, V>, validate: ValidateFn<V>) {
       const ops = getOperation(document);
       ops.setValidate(validate);
     },
     /**
      * Add an operation override. Can be used to implement custom operations
      */
-    addOverride<R, V>(document: TypedDocumentNode<R, V>, handler: CustomHandlerFn<R, V>) {
+    addOverride<R, V>(document: TypedOperation<R, V>, handler: CustomHandlerFn<R, V>) {
       const ops = getOperation(document);
       ops.setCustomHandler(handler);
     },

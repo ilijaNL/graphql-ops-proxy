@@ -5,7 +5,7 @@ Important to keep this
 directive @pcached(ttl: Int!) on QUERY
 
 type Query {
-  __health: Boolean!
+  _health: Boolean!
 }
 
 type Mutation {

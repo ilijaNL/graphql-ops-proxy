@@ -58,7 +58,8 @@ export type CacheOptions = {
 };
 
 /**
- * Wraps all resolvers with @async-cache-dedupe
+ * Wraps all resolvers with @async-cache-dedupe,
+ * requires to have dependencies: yarn add async-cache-dedupe safe-stable-stringify
  * @param definitions
  * @param options
  */

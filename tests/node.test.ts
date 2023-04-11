@@ -1,21 +1,15 @@
 import { createRequestPool, withCache } from '../src/node';
-import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
 import { MockAgent } from 'undici';
 import tap from 'tap';
-import { createGraphqlProxy } from '../src/proxy';
-import { parse, print } from 'graphql';
+import { TypedOperation, createGraphqlProxy } from '../src/proxy';
 
-const queryDoc = { __meta__: { operation: 'operation' } } as unknown as DocumentNode<{ me: number }, { var1: string }>;
+const queryDoc = new TypedOperation<{ me: number }, { var1: string }>('operation', 'query');
 
 tap.test('dedupes remote', async (t) => {
   const agent = new MockAgent();
   agent.disableNetConnect();
 
   const client = agent.get('http://localhost:3001').setMaxListeners(20);
-
-  const opsMap = {
-    hash1: 'query test1 { test }',
-  };
 
   client
     .intercept({
@@ -33,7 +27,10 @@ tap.test('dedupes remote', async (t) => {
     },
   });
 
-  const proxy = createGraphqlProxy(opsMap, requestPool.request);
+  const proxy = createGraphqlProxy(
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    requestPool.request
+  );
 
   withCache(proxy.getOperations(), { cacheTTL: 0 });
 
@@ -79,10 +76,6 @@ tap.test('caches remote', async (t) => {
   const agent = new MockAgent();
   agent.disableNetConnect();
 
-  const opsMap = {
-    op: `query cachedQuery @pcached(ttl: 1) { test }`,
-  };
-
   const client = agent.get('http://localhost:3001');
   client
     .intercept({
@@ -91,7 +84,7 @@ tap.test('caches remote', async (t) => {
     })
     .reply(200, ({ body }) => {
       const { query } = JSON.parse(body as string);
-      t.equal(query, print(parse('query cachedQuery { test }')));
+      t.equal(query, 'query cachedQuery  { test }');
       return Buffer.from(Math.random().toString());
     })
     .times(2);
@@ -102,7 +95,17 @@ tap.test('caches remote', async (t) => {
     },
   });
 
-  const proxy = createGraphqlProxy(opsMap, requestPool.request);
+  const proxy = createGraphqlProxy(
+    [
+      {
+        behaviour: { ttl: 1 },
+        operationName: 'cachedQuery',
+        operationType: 'query',
+        query: 'query cachedQuery  { test }',
+      },
+    ],
+    requestPool.request
+  );
 
   withCache(proxy.getOperations(), { cacheTTL: 1 });
 
@@ -125,9 +128,7 @@ tap.test('caches remote', async (t) => {
 tap.test('custom override', async (t) => {
   t.plan(3);
   const proxy = createGraphqlProxy(
-    {
-      1: 'query operation { me }',
-    },
+    [{ behaviour: {}, operationName: 'operation', operationType: 'query', query: 'query operation { me }' }],
     async () => ({ headers: {}, response: null })
   );
 
@@ -145,9 +146,7 @@ tap.test('custom override', async (t) => {
 
 tap.test('dedupes', async (t) => {
   const proxy = createGraphqlProxy(
-    {
-      1: 'query operation { me }',
-    },
+    [{ behaviour: {}, operationName: 'operation', operationType: 'query', query: 'query operation { me }' }],
     async () => ({ headers: {}, response: null })
   );
 
@@ -168,9 +167,7 @@ tap.test('dedupes', async (t) => {
 
 tap.test('does not dedupes mutation', async (t) => {
   const proxy = createGraphqlProxy(
-    {
-      1: 'mutation operation { me }',
-    },
+    [{ behaviour: {}, operationName: 'operation', operationType: 'mutation', query: 'mutation operation { me }' }],
     async () => ({ headers: {}, response: null })
   );
 
@@ -191,9 +188,7 @@ tap.test('does not dedupes mutation', async (t) => {
 
 tap.test('cache with override', async (t) => {
   const proxy = createGraphqlProxy(
-    {
-      1: 'query operation { me }',
-    },
+    [{ behaviour: {}, operationName: 'operation', query: 'query operation { me }', operationType: 'query' }],
     async () => ({ headers: {}, response: null })
   );
 

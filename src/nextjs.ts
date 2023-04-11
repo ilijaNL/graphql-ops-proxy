@@ -1,5 +1,5 @@
 import { createRequestPool, withCache } from './node';
-import { createGraphqlProxy, NotFoundError, THeaders, ValidationError } from './proxy';
+import { createGraphqlProxy, NotFoundError, THeaders, ValidationError, GeneratedOperation } from './proxy';
 
 // types imports
 import type { NextApiRequest, NextApiResponse } from 'next';
@@ -27,7 +27,7 @@ export function createNextHandler(
   /**
    * Operations that should be proxied
    */
-  operations: Record<string, string>,
+  operations: Array<GeneratedOperation>,
   options?: Partial<{
     /**
      * Request function or undici pool option

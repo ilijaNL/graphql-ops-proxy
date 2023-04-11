@@ -1,3 +1,0 @@
-{
-  "8c208c190c0d083e78b031fd38aa317fdf7c3c6a": "query getCountry($countryCode: String!) @pcached(ttl: 30) { country: countries(filter: {code: {eq: $countryCode}}) { capital code name } }"
-}

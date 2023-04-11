@@ -1,10 +1,9 @@
 import tap from 'tap';
-import { createGraphqlProxy } from '../src/proxy';
+import { TypedOperation, createGraphqlProxy } from '../src/proxy';
 import { Type, TSchema, Static } from '@sinclair/typebox';
 import { makeExecutableSchema } from '@graphql-tools/schema';
 import { addMocksToSchema } from '@graphql-tools/mock';
-import { graphql, parse, print } from 'graphql';
-import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
+import { graphql } from 'graphql';
 import addFormats from 'ajv-formats';
 import Ajv from 'ajv/dist/2019';
 
@@ -31,9 +30,6 @@ export const createValidateFn = <T extends TSchema>(schema: T) => {
   const validate = ajv.compile<Static<T>>(schema);
   return validate;
 };
-
-const queryDoc = { __meta__: { operation: 'operation' } } as unknown as DocumentNode<{ me: number }, { var1: string }>;
-
 const schema = makeExecutableSchema({
   typeDefs: `
     type Query {
@@ -49,7 +45,7 @@ const schema = makeExecutableSchema({
 const schemaWithMocks = addMocksToSchema({ schema });
 
 tap.test('happy', async (t) => {
-  const proxy = createGraphqlProxy({}, async () => ({ headers: {}, response: null }));
+  const proxy = createGraphqlProxy([], async () => ({ headers: {}, response: null }));
   const errors = await proxy.validate();
 
   t.same(errors, []);
@@ -57,9 +53,7 @@ tap.test('happy', async (t) => {
 
 tap.test('return errors when not all operations are implemented', async (t) => {
   const proxy = createGraphqlProxy(
-    {
-      hash1: 'query test { me }',
-    },
+    [{ behaviour: {}, operationName: 'test', query: 'query test { me }', operationType: 'query' }],
     async ({ body }) => {
       const source = JSON.parse(body).query;
       const data = await graphql({
@@ -77,35 +71,22 @@ tap.test('return errors when not all operations are implemented', async (t) => {
   t.equal(errors[0]?.message, 'Cannot query field "me" on type "Query".');
 });
 
-tap.test('throws when not valid query', async (t) => {
-  t.throws(() =>
-    createGraphqlProxy(
-      {
-        hash1: 'query { me }',
-      },
-      async () => ({ response: null })
-    )
-  );
-});
-
 tap.test('rejects when not found', async (t) => {
   t.plan(1);
 
-  const proxy = createGraphqlProxy({}, async () => ({ headers: {}, response: null }));
+  const proxy = createGraphqlProxy([], async () => ({ headers: {}, response: null }));
   t.rejects(proxy.request('does-not-exists', { var1: 'var2' }, { header: 'head1' }));
 });
 
 tap.test('calls remote', async (t) => {
   t.plan(4);
 
-  const opsMap = {
-    op1: `query test { test }`,
-  };
+  const ops = [{ behaviour: {}, operationName: 'test', operationType: 'query', query: 'query test { test }' }] as const;
 
-  const proxy = createGraphqlProxy(opsMap, async ({ body, headers }) => {
+  const proxy = createGraphqlProxy([...ops], async ({ body, headers }) => {
     const input = JSON.parse(body);
 
-    t.equal(input.query, print(parse(opsMap.op1)));
+    t.match(input.query, ops[0].query);
     t.same(input.variables, { var1: 'var2' });
     t.equal((headers as Record<string, string>)['header'], 'head1');
 
@@ -124,41 +105,16 @@ tap.test('calls remote', async (t) => {
   t.same(response.data, { me: 123 });
 });
 
-tap.test('correctly handles directives', async (t) => {
-  const opsMap = {
-    op1: `query test @pcached(ttl: 1) { test }`,
-    op2: `query abc @cached(ttl: 1) { test }`,
-    op3: `query d { awaw }`,
-  };
-
-  const queries: string[] = [];
-
-  const proxy = createGraphqlProxy(opsMap, async ({ body }) => {
-    const { query } = JSON.parse(body as string);
-    queries.push(query);
-
-    return {
-      response: Buffer.from(Math.random().toString()),
-    };
-  });
-
-  await proxy.request('test');
-  await proxy.request('abc');
-  await proxy.request('d');
-
-  t.same(queries, [print(parse('query test { test }')), print(parse(opsMap.op2)), print(parse(opsMap.op3))]);
-});
-
 tap.test('validates', async (t) => {
   t.plan(4);
   const proxy = createGraphqlProxy(
-    {
-      hash1: 'query operation { me }',
-    },
+    [{ behaviour: {}, operationName: 'operation', operationType: 'query', query: 'query operation { me }' }],
     async () => ({ headers: {}, response: null })
   );
 
-  proxy.addOverride(queryDoc, async () => {
+  const op = new TypedOperation('operation', 'query');
+
+  proxy.addOverride(op, async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return {
       me: 222,
@@ -167,7 +123,7 @@ tap.test('validates', async (t) => {
 
   const validateFn = createValidateFn(Type.Object({ var1: Type.String({ minLength: 3 }) }));
 
-  proxy.addValidation(queryDoc, async (input) => {
+  proxy.addValidation(op, async (input) => {
     t.pass('called');
     const isValid = validateFn(input);
     if (isValid) {

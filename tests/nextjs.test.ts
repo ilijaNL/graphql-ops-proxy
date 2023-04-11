@@ -2,30 +2,31 @@ import tap from 'tap';
 import { createMocks } from 'node-mocks-http';
 import { createNextHandler } from '../src/nextjs';
 import { print, parse } from 'graphql';
-import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
+import { TypedOperation } from '../src/proxy';
 
 tap.test('happy post', async (t) => {
-  const opsMap = {
-    hash1: 'query test1 { test }',
-  };
-  const handler = createNextHandler(new URL('http://localhost:3001/api/graphql'), opsMap, {
-    validate: false,
-    request: async ({ body, headers }) => {
-      t.same(JSON.parse(body).query, print(parse(opsMap.hash1)));
-      t.same(headers, {
-        'x-hasura-app': 'app',
-        'content-length': 36,
-        'content-type': 'application/json',
-      });
-      return {
-        response: {
-          data: {
-            test: '123',
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      request: async ({ body, headers }) => {
+        t.same(JSON.parse(body).query, 'query test1 { test }');
+        t.same(headers, {
+          'x-hasura-app': 'app',
+          'content-length': 32,
+          'content-type': 'application/json',
+        });
+        return {
+          response: {
+            data: {
+              test: '123',
+            },
           },
-        },
-      };
-    },
-  });
+        };
+      },
+    }
+  );
 
   const { req, res } = createMocks({
     method: 'POST',
@@ -48,21 +49,22 @@ tap.test('happy post', async (t) => {
 });
 
 tap.test('only accept post/get', async (t) => {
-  const opsMap = {
-    hash1: 'query test1 { test }',
-  };
-  const handler = createNextHandler(new URL('http://localhost:3001/api/graphql'), opsMap, {
-    validate: false,
-    request: async ({ body, headers }) => {
-      return {
-        response: {
-          data: {
-            test: '123',
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      request: async ({ body, headers }) => {
+        return {
+          response: {
+            data: {
+              test: '123',
+            },
           },
-        },
-      };
-    },
-  });
+        };
+      },
+    }
+  );
 
   const { req, res } = createMocks({
     method: 'PUT',
@@ -84,27 +86,28 @@ tap.test('only accept post/get', async (t) => {
 });
 
 tap.test('happy get', async (t) => {
-  const opsMap = {
-    hash1: 'query test1 { test }',
-  };
-  const handler = createNextHandler(new URL('http://localhost:3001/api/graphql'), opsMap, {
-    validate: false,
-    request: async ({ body, headers }) => {
-      t.same(JSON.parse(body).query, print(parse(opsMap.hash1)));
-      t.same(headers, {
-        'x-hasura-app': 'app',
-        'content-length': 51,
-        'content-type': 'application/json',
-      });
-      return {
-        response: {
-          data: {
-            test: '123',
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      request: async ({ body, headers }) => {
+        t.same(JSON.parse(body).query, 'query test1 { test }');
+        t.same(headers, {
+          'x-hasura-app': 'app',
+          'content-length': 47,
+          'content-type': 'application/json',
+        });
+        return {
+          response: {
+            data: {
+              test: '123',
+            },
           },
-        },
-      };
-    },
-  });
+        };
+      },
+    }
+  );
 
   const { req, res } = createMocks({
     method: 'GET',
@@ -128,27 +131,28 @@ tap.test('happy get', async (t) => {
 });
 
 tap.test('not found', async (t) => {
-  const opsMap = {
-    hash1: 'query test1 { test }',
-  };
-  const handler = createNextHandler(new URL('http://localhost:3001/api/graphql'), opsMap, {
-    validate: false,
-    request: async ({ body, headers }) => {
-      t.same(JSON.parse(body).query, print(parse(opsMap.hash1)));
-      t.same(headers, {
-        'x-hasura-app': 'app',
-        'content-length': 51,
-        'content-type': 'application/json',
-      });
-      return {
-        response: {
-          data: {
-            test: '123',
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      request: async ({ body, headers }) => {
+        t.same(JSON.parse(body).query, 'query test1 { test }');
+        t.same(headers, {
+          'x-hasura-app': 'app',
+          'content-length': 51,
+          'content-type': 'application/json',
+        });
+        return {
+          response: {
+            data: {
+              test: '123',
+            },
           },
-        },
-      };
-    },
-  });
+        };
+      },
+    }
+  );
 
   const { req, res } = createMocks({
     method: 'GET',
@@ -173,34 +177,39 @@ tap.test('on create + input validation', async (t) => {
   const opsMap = {
     hash1: 'query test1 { test }',
   };
-  const queryDoc = { __meta__: { operation: 'test1' } } as unknown as DocumentNode<{ me: number }, { var1: number }>;
-  const handler = createNextHandler(new URL('http://localhost:3001/api/graphql'), opsMap, {
-    validate: false,
-    onCreate(proxy) {
-      proxy.addValidation(queryDoc, async function (input) {
-        if (typeof input.var1 !== 'number') {
-          return {
-            type: 'validation',
-            message: 'var 1 is not a number',
-          };
-        }
-        return;
-      });
-    },
-    request: async ({ body, headers }) => {
-      t.same(JSON.parse(body).query, print(parse(opsMap.hash1)));
-      t.same(headers, {
-        'x-hasura-app': 'app',
-        'content-length': 51,
-        'content-type': 'application/json',
-      });
-      return {
-        response: {
-          data: null,
-        },
-      };
-    },
-  });
+  const queryDoc = new TypedOperation<{ me: number }, { var1: number }>('test1', 'query');
+
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      onCreate(proxy) {
+        proxy.addValidation(queryDoc, async function (input) {
+          if (typeof input.var1 !== 'number') {
+            return {
+              type: 'validation',
+              message: 'var 1 is not a number',
+            };
+          }
+          return;
+        });
+      },
+      request: async ({ body, headers }) => {
+        t.same(JSON.parse(body).query, print(parse(opsMap.hash1)));
+        t.same(headers, {
+          'x-hasura-app': 'app',
+          'content-length': 51,
+          'content-type': 'application/json',
+        });
+        return {
+          response: {
+            data: null,
+          },
+        };
+      },
+    }
+  );
 
   const { req, res } = createMocks({
     method: 'GET',
@@ -224,24 +233,25 @@ tap.test('on create + input validation', async (t) => {
 });
 
 tap.test('cache', async (t) => {
-  const opsMap = {
-    hash1: 'query test1 { test }',
-  };
-  const handler = createNextHandler(new URL('http://localhost:3001/api/graphql'), opsMap, {
-    validate: false,
-    withCache: {
-      cacheTTL: 1,
-    },
-    request: async () => {
-      return {
-        response: {
-          data: {
-            test: Math.random().toString(),
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      validate: false,
+      withCache: {
+        cacheTTL: 1,
+      },
+      request: async () => {
+        return {
+          response: {
+            data: {
+              test: Math.random().toString(),
+            },
           },
-        },
-      };
-    },
-  });
+        };
+      },
+    }
+  );
 
   const m1 = createMocks({
     method: 'POST',

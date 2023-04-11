@@ -1,5 +1,4 @@
 import { CodegenConfig } from '@graphql-codegen/cli';
-import { getOperationAST } from 'graphql';
 
 const sharedConfig = {
   enumsAsConst: true,
@@ -34,25 +33,9 @@ const config: CodegenConfig = {
   ],
   documents: ['src/**/*.graphql'],
   generates: {
-    './src/__generated__/': {
-      preset: 'client',
-      presetConfig: {
-        fragmentMasking: false,
-        onExecutableDocumentNode: function (document) {
-          const ast = getOperationAST(document);
-          if (ast?.operation) {
-            return {
-              operation: ast.name?.value,
-              type: ast.operation,
-            };
-          }
-        },
-        persistedDocuments: {
-          mode: 'replaceDocumentWithHash',
-        },
-      },
+    './src/__generated__/gql.ts': {
+      plugins: ['typescript', 'typescript-operations', 'graphql-codegen-typed-operation'],
       config: {
-        documentMode: 'string',
         ...sharedConfig,
       },
     },

@@ -1,42 +1,137 @@
-/* eslint-disable */
-import * as types from './graphql';
-import { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-node/core';
-
-/**
- * Map of all GraphQL operations in the project.
- *
- * This map has several performance disadvantages:
- * 1. It is not tree-shakeable, so it will include all operations in the project.
- * 2. It is not minifiable, so the string of a GraphQL query will be multiple times inside the bundle.
- * 3. It does not support dead code elimination, so it will add unused operations.
- *
- * Therefore it is highly recommended to use the babel or swc plugin for production.
- */
-const documents = {
-    "query getCountry($countryCode: String!) @pcached(ttl: 30) {\n  country: countries(filter: {code: {eq: $countryCode}}) {\n    code\n    name\n    capital\n  }\n}": types.GetCountryDocument,
+export type Maybe<T> = T | null;
+export type InputMaybe<T> = Maybe<T>;
+export type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
+export type MakeOptional<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]?: Maybe<T[SubKey]> };
+export type MakeMaybe<T, K extends keyof T> = Omit<T, K> & { [SubKey in K]: Maybe<T[SubKey]> };
+/** All built-in and custom scalars, mapped to their actual values */
+export type Scalars = {
+  ID: string;
+  String: string;
+  Boolean: boolean;
+  Int: number;
+  Float: number;
 };
 
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- *
- *
- * @example
- * ```ts
- * const query = graphql(`query GetUser($id: ID!) { user(id: $id) { name } }`);
- * ```
- *
- * The query argument is unknown!
- * Please regenerate the types.
- */
-export function graphql(source: string): unknown;
+export type Continent = {
+  code: Scalars['ID'];
+  countries: Array<Country>;
+  name: Scalars['String'];
+};
 
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(source: "query getCountry($countryCode: String!) @pcached(ttl: 30) {\n  country: countries(filter: {code: {eq: $countryCode}}) {\n    code\n    name\n    capital\n  }\n}"): (typeof documents)["query getCountry($countryCode: String!) @pcached(ttl: 30) {\n  country: countries(filter: {code: {eq: $countryCode}}) {\n    code\n    name\n    capital\n  }\n}"];
+export type ContinentFilterInput = {
+  code?: InputMaybe<StringQueryOperatorInput>;
+};
 
-export function graphql(source: string) {
-  return (documents as any)[source] ?? {};
-}
+export type Country = {
+  awsRegion: Scalars['String'];
+  capital: Maybe<Scalars['String']>;
+  code: Scalars['ID'];
+  continent: Continent;
+  currencies: Array<Scalars['String']>;
+  currency: Maybe<Scalars['String']>;
+  emoji: Scalars['String'];
+  emojiU: Scalars['String'];
+  languages: Array<Language>;
+  name: Scalars['String'];
+  native: Scalars['String'];
+  phone: Scalars['String'];
+  phones: Array<Scalars['String']>;
+  states: Array<State>;
+};
 
-export type DocumentType<TDocumentNode extends DocumentNode<any, any>> = TDocumentNode extends DocumentNode<  infer TType,  any>  ? TType  : never;
+export type CountryFilterInput = {
+  code?: InputMaybe<StringQueryOperatorInput>;
+  continent?: InputMaybe<StringQueryOperatorInput>;
+  currency?: InputMaybe<StringQueryOperatorInput>;
+};
+
+export type Language = {
+  code: Scalars['ID'];
+  name: Scalars['String'];
+  native: Scalars['String'];
+  rtl: Scalars['Boolean'];
+};
+
+export type LanguageFilterInput = {
+  code?: InputMaybe<StringQueryOperatorInput>;
+};
+
+export type Mutation = {
+  noop: Scalars['Boolean'];
+};
+
+export type Query = {
+  _health: Scalars['Boolean'];
+  continent: Maybe<Continent>;
+  continents: Array<Continent>;
+  countries: Array<Country>;
+  country: Maybe<Country>;
+  language: Maybe<Language>;
+  languages: Array<Language>;
+};
+
+
+export type QueryContinentArgs = {
+  code: Scalars['ID'];
+};
+
+
+export type QueryContinentsArgs = {
+  filter?: InputMaybe<ContinentFilterInput>;
+};
+
+
+export type QueryCountriesArgs = {
+  filter?: InputMaybe<CountryFilterInput>;
+};
+
+
+export type QueryCountryArgs = {
+  code: Scalars['ID'];
+};
+
+
+export type QueryLanguageArgs = {
+  code: Scalars['ID'];
+};
+
+
+export type QueryLanguagesArgs = {
+  filter?: InputMaybe<LanguageFilterInput>;
+};
+
+export type State = {
+  code: Maybe<Scalars['String']>;
+  country: Country;
+  name: Scalars['String'];
+};
+
+export type StringQueryOperatorInput = {
+  eq?: InputMaybe<Scalars['String']>;
+  in?: InputMaybe<Array<Scalars['String']>>;
+  ne?: InputMaybe<Scalars['String']>;
+  nin?: InputMaybe<Array<Scalars['String']>>;
+  regex?: InputMaybe<Scalars['String']>;
+};
+
+export type GetCountryQueryVariables = Exact<{
+  countryCode: Scalars['String'];
+}>;
+
+
+export type GetCountryQuery = { country: Array<{ code: string, name: string, capital: string | null }> };
+
+export class TypedOperation<Result, Variables> {
+  /**
+   * This type is used to ensure that the variables you pass in to the query are assignable to Variables
+   * and that the Result is assignable to whatever you pass your result to. The method is never actually
+   * implemented, but the type is valid because we list it as optional
+   */
+  __apiType?: (variables: Variables) => Result;
+
+  constructor(public readonly operation: string, public readonly operationType: "query" | "mutation" | "subscription") {}
+};
+    
+export const GetCountryDocument = new TypedOperation<GetCountryQuery, GetCountryQueryVariables>("getCountry", "query");
+
+export const OPERATIONS = [{"operationName":"getCountry","operationType":"query","query":"query getCountry($countryCode: String!) { country: countries(filter: {code: {eq: $countryCode}}) { capital code name } }","behaviour":{"ttl":30}}]
