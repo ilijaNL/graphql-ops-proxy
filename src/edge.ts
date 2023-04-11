@@ -55,7 +55,7 @@ export function handleResponse({ response, headers }: ProxyResponse, _op: OpsDef
 /**
  * Create a graphql proxy handler
  */
-export function createEdge(
+export function createEdgeHandler(
   /**
    * Request function or undici pool option
    */

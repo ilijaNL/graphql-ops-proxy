@@ -27,7 +27,7 @@ jobs:
           cache: "yarn"
       - run: yarn install --frozen-lockfile
       - run: yarn tc
-      - name: Create Release Pull Request
+      - name: Create Release Pull Request Or Release
         uses: changesets/action@v1
         with:
           publish: yarn ci:publish

@@ -1,7 +1,7 @@
 {
   "name": "graphql-ops-proxy",
   "author": "IlijaNL",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "types": "lib/index.d.ts",
   "main": "lib/index.js",
   "files": [
@@ -18,7 +18,8 @@
     "nextjs",
     "hasura",
     "workers",
-    "serverless"
+    "serverless",
+    "edge"
   ],
   "bugs": {
     "url": "https://github.com/ilijaNL/graphql-ops-proxy/issues"
