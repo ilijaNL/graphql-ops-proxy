@@ -7,7 +7,7 @@ const handler = createEdgeHandler(
   OPERATIONS as Array<GeneratedOperation>,
   {
     onResponse(resp, op) {
-      const headers: Record<string, string> = { ...resp.headers };
+      const headers: Record<string, string> = resp.headers;
 
       // add cache headers
       if (op.mBehaviour.ttl) {

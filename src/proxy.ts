@@ -33,6 +33,25 @@ export interface IValidationError {
   message: string;
 }
 
+export function fromPostRequest(body: any): Partial<{ operation: string; variables: Record<string, any> }> {
+  const operation = body.op ?? body.operation ?? body.query;
+  const variables = body.v ?? body.variables;
+  return {
+    operation,
+    variables,
+  };
+}
+
+export function fromGetRequest(query: Record<string, string>): ReturnType<typeof fromPostRequest> {
+  const operation = query['op'] ?? query['operation'] ?? query['query'];
+  const variables = query['v'] ?? query['variables'];
+
+  return {
+    operation,
+    variables: variables ? (typeof variables === 'string' ? JSON.parse(variables) : variables) : undefined,
+  };
+}
+
 export class NotFoundError extends Error {}
 export class ValidationError extends Error {}
 
