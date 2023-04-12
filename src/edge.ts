@@ -7,6 +7,8 @@ import {
   ProxyResponse,
   defaultHeaderCopy,
   OpsDef,
+  fromPostRequest,
+  fromGetRequest,
 } from './proxy';
 
 // types imports
@@ -93,14 +95,14 @@ export function createEdgeHandler(
 
   const onResponse = options?.onResponse ?? handleResponse;
 
-  async function _request(data: { operation: string; variables: any; headers: THeaders }) {
-    if (!data.operation || typeof data.operation !== 'string') {
+  async function _request(operation: string, variables: any, headers: THeaders) {
+    if (!operation || typeof operation !== 'string') {
       return sendError('no operation defined', 404);
     }
 
     try {
-      const res = await proxy.request(data.operation, data.variables, data.headers);
-      const op = proxy.getOperation(data.operation);
+      const res = await proxy.request(operation, variables, headers);
+      const op = proxy.getOperation(operation);
       const { response, headers: _headers } = res;
       return onResponse({ response, headers: toResultHeaders(_headers) }, op);
     } catch (e: unknown) {
@@ -118,20 +120,21 @@ export function createEdgeHandler(
 
   return async function handle(req: Request) {
     if (req.method === 'POST') {
-      const { op, v } = await req.json();
+      const result = await req.json();
+      const payload = fromPostRequest(result);
       // what is best way to convert?
       const headers: THeaders = req.headers as unknown as THeaders;
-      return _request({ operation: op, variables: v, headers: headers });
+      return _request(payload.operation as string, payload.variables, headers);
     }
 
     if (req.method === 'GET') {
-      const { searchParams } = new URL(req.url);
+      const url = new URL(req.url);
+      const params = url.searchParams;
 
-      const op = searchParams.get('op');
+      const payload = fromGetRequest(Object.fromEntries(params.entries()));
 
-      const variables = searchParams.get('v') ? JSON.parse(searchParams.get('v') as string) : undefined;
       const headers: THeaders = req.headers as unknown as THeaders;
-      return _request({ headers: headers, operation: op as string, variables });
+      return _request(payload.operation as string, payload.variables, headers);
     }
 
     return sendError('not-found', 404);

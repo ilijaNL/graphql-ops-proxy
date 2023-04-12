@@ -6,6 +6,8 @@ import {
   ValidationError,
   GeneratedOperation,
   defaultHeaderCopy,
+  fromGetRequest,
+  fromPostRequest,
 } from './proxy';
 
 // types imports
@@ -98,17 +100,17 @@ export function createNextHandler(
       message: message,
     });
   }
-  async function _request(data: { operation: string; variables: any; headers: THeaders }, res: NextApiResponse) {
-    if (!data.operation || typeof data.operation !== 'string') {
+  async function _request(operation: string, variables: any, headers: THeaders, res: NextApiResponse) {
+    if (!operation || typeof operation !== 'string') {
       return sendNotFound(res, 'no operation defined');
     }
 
     try {
-      const { response, headers } = await proxy.request(data.operation, data.variables, data.headers);
+      const proxyResponse = await proxy.request(operation, variables, headers);
 
-      setHeaders(toResultHeaders(headers), res);
+      setHeaders(toResultHeaders(proxyResponse.headers), res);
 
-      return res.send(response);
+      return res.send(proxyResponse.response);
     } catch (e: unknown) {
       if (e instanceof NotFoundError) {
         return sendNotFound(res, e.message);
@@ -127,21 +129,14 @@ export function createNextHandler(
   return async function handle(req: NextApiRequest, res: NextApiResponse) {
     const headers = req.headers as THeaders;
     if (req.method === 'POST') {
-      const { op, v } = req.body;
-
-      return _request({ operation: op, variables: v, headers: headers }, res);
+      const payload = fromPostRequest(req.body);
+      return _request(payload.operation as string, payload.variables, headers, res);
     }
 
     if (req.method === 'GET') {
-      const op = req.query['op'];
+      const payload = fromGetRequest(req.query as Record<string, string>);
 
-      const variables = req.query['v']
-        ? typeof req.query['v'] === 'object'
-          ? req.query['v']
-          : JSON.parse(req.query['v'] as string)
-        : undefined;
-
-      return _request({ headers: headers, operation: op as string, variables }, res);
+      return _request(payload.operation as string, payload.operation, headers, res);
     }
 
     return sendNotFound(res, 'not-found');
