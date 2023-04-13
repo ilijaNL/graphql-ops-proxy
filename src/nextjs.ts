@@ -2,23 +2,22 @@ import { createRequestPool, withCache } from './node';
 import {
   createGraphqlProxy,
   NotFoundError,
-  THeaders,
   ValidationError,
   GeneratedOperation,
   defaultHeaderCopy,
   fromGetRequest,
   fromPostRequest,
 } from './proxy';
+import { validateProxy } from './utils';
 
 // types imports
 import type { NextApiRequest, NextApiResponse } from 'next';
-import type { ServerResponse } from 'http';
+import type { IncomingHttpHeaders, OutgoingHttpHeaders, ServerResponse } from 'http';
 import type { Pool } from 'undici';
 import type { GraphqlProxy, RequestFn } from './proxy';
 import type { CacheOptions } from './node';
-import { validateProxy } from './utils';
 
-function setHeaders(headers: THeaders, res: ServerResponse) {
+function setHeaders(headers: OutgoingHttpHeaders, res: ServerResponse) {
   Object.entries(headers).forEach(([key, value]) => {
     if (value) {
       res.setHeader(key, value);
@@ -51,7 +50,7 @@ export function createNextHandler(
      * Should it validate all operations against schema. It is recommended to turn it on when extending schema
      *
      */
-    validate: boolean | THeaders;
+    validate: boolean | IncomingHttpHeaders;
     /**
      * Can be used to add overrides or do other manu
      * @param proxy
@@ -64,7 +63,7 @@ export function createNextHandler(
      * @param proxyHeaders
      * @returns
      */
-    resultHeaders: typeof defaultHeaderCopy;
+    resultHeaders: (proxyHeaders?: OutgoingHttpHeaders) => OutgoingHttpHeaders;
   }>
 ) {
   let proxy: GraphqlProxy;
@@ -100,7 +99,7 @@ export function createNextHandler(
       message: message,
     });
   }
-  async function _request(operation: string, variables: any, headers: THeaders, res: NextApiResponse) {
+  async function _request(operation: string, variables: any, headers: IncomingHttpHeaders, res: NextApiResponse) {
     if (!operation || typeof operation !== 'string') {
       return sendNotFound(res, 'no operation defined');
     }
@@ -127,7 +126,7 @@ export function createNextHandler(
   }
 
   return async function handle(req: NextApiRequest, res: NextApiResponse) {
-    const headers = req.headers as THeaders;
+    const headers = req.headers;
     if (req.method === 'POST') {
       const payload = fromPostRequest(req.body);
       return _request(payload.operation as string, payload.variables, headers, res);
@@ -136,7 +135,7 @@ export function createNextHandler(
     if (req.method === 'GET') {
       const payload = fromGetRequest(req.query as Record<string, string>);
 
-      return _request(payload.operation as string, payload.operation, headers, res);
+      return _request(payload.operation as string, payload.variables, headers, res);
     }
 
     return sendNotFound(res, 'not-found');

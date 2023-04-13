@@ -136,7 +136,10 @@ tap.test('custom override', async (t) => {
     t.equal(input.var1, 'var2');
     t.equal(headers.header, 'head1');
     return {
-      me: 123,
+      response: {
+        me: 123,
+      },
+      headers: {},
     };
   });
 
@@ -155,7 +158,10 @@ tap.test('dedupes', async (t) => {
   proxy.addOverride(queryDoc, async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return {
-      me: Math.random(),
+      response: {
+        me: Math.random(),
+      },
+      headers: {},
     };
   });
 
@@ -176,7 +182,10 @@ tap.test('does not dedupes mutation', async (t) => {
   proxy.addOverride(queryDoc, async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return {
-      me: Math.random(),
+      response: {
+        me: Math.random(),
+      },
+      headers: {},
     };
   });
 
@@ -197,7 +206,10 @@ tap.test('cache with override', async (t) => {
   proxy.addOverride(queryDoc, async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return {
-      me: Math.random(),
+      response: {
+        me: Math.random(),
+      },
+      headers: {},
     };
   });
 
