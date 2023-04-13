@@ -27,6 +27,7 @@
   "homepage": "https://github.com/ilijaNL/graphql-ops-proxy#readme",
   "scripts": {
     "build": "tsc",
+    "lint": "eslint ./src",
     "dev": "tsc --watch",
     "tc": "tsc --noEmit",
     "ci:publish": "yarn build && changeset publish",
@@ -46,6 +47,8 @@
     "@sinclair/typebox": "^0.26.8",
     "@types/node": "^16.0.0",
     "@types/tap": "^15.0.8",
+    "@typescript-eslint/eslint-plugin": "^5.58.0",
+    "@typescript-eslint/parser": "^5.58.0",
     "ajv": "^8.12.0",
     "ajv-formats": "^2.1.1",
     "async-cache-dedupe": "^1.10.2",
