@@ -118,7 +118,9 @@ tap.test('validates', async (t) => {
   proxy.addOverride(op, async () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     return {
-      me: 222,
+      response: {
+        me: 222,
+      },
     };
   });
 

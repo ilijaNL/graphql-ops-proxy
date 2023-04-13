@@ -11,38 +11,33 @@ Make your graphql server secure and blazingly fast 🚀🚀
 Create a proxy for nextjs webapp (on the edge): `/pages/api/proxy.ts`
 
 ```typescript
-import { createEdgeHandler } from 'graphql-ops-proxy/lib/edge';
+import { createEdgeHandler, fromNodeHeaders } from 'graphql-ops-proxy/lib/edge';
 import { GeneratedOperation } from 'graphql-ops-proxy/lib/proxy';
-// using graphql-codegen-typed-operation with codegen to generate operations for this frontend
-import { OPERATIONS } from '@/generated/graphql-docs.generated';
+import { OPERATIONS } from '@/__generated__/gql';
 
 const handler = createEdgeHandler(
-  new URL('https://mygraphqlserver.com/graphql'),
+  new URL('https://countries.trevorblades.com'),
   OPERATIONS as Array<GeneratedOperation>,
   {
-    onResponse(resp, op) {
-      const response = new Response(typeof resp.response === 'string' ? resp.response : JSON.stringify(resp.response), {
-        status: 200,
-      });
+    onResponse(resp, headers, op) {
+      const responseHeaders = fromNodeHeaders(headers);
 
-      Object.entries(resp.headers ?? {}).forEach(([key, value]) => {
-        response.headers.set(key, value);
-      });
-
-      // set cdn cache
+      // add cache headers
       if (op.mBehaviour.ttl) {
-        response.headers.set(
+        responseHeaders.set(
           'cache-control',
           `public, s-maxage=${op.mBehaviour.ttl}, stale-while-revalidate=${Math.floor(op.mBehaviour.ttl * 0.5)}`
         );
       }
 
-      return response;
+      return new Response(resp, {
+        status: 200,
+        headers: responseHeaders,
+      });
     },
   }
 );
 
-// run this on edge
 export const config = {
   runtime: 'edge',
 };

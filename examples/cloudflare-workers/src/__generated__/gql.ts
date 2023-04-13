@@ -39,6 +39,11 @@ export type Country = {
   states: Array<State>;
 };
 
+
+export type CountryNameArgs = {
+  lang: InputMaybe<Scalars['String']>;
+};
+
 export type CountryFilterInput = {
   code?: InputMaybe<StringQueryOperatorInput>;
   continent?: InputMaybe<StringQueryOperatorInput>;

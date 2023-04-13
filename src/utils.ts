@@ -1,5 +1,6 @@
 import type { GraphQLError } from 'graphql';
-import { GraphqlProxy, THeaders } from './proxy';
+import { GraphqlProxy } from './proxy';
+import type { IncomingHttpHeaders } from 'http';
 
 export function getHasuraHeaders(headers: Record<string, any>): Record<string, any> {
   return Object.keys(headers).reduce((agg, key) => {
@@ -10,7 +11,7 @@ export function getHasuraHeaders(headers: Record<string, any>): Record<string, a
   }, {} as Record<string, any>);
 }
 
-export const validateProxy = async (proxy: GraphqlProxy, introspectionHeaders: THeaders = {}) => {
+export const validateProxy = async (proxy: GraphqlProxy, introspectionHeaders: IncomingHttpHeaders = {}) => {
   // fetch introspection
   // filter out custom executions
   const opsToCheck = proxy.getOperations().filter((o) => !o.customHandler);

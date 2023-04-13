@@ -39,6 +39,11 @@ export type Country = {
   states: Array<State>;
 };
 
+
+export type CountryNameArgs = {
+  lang: InputMaybe<Scalars['String']>;
+};
+
 export type CountryFilterInput = {
   code?: InputMaybe<StringQueryOperatorInput>;
   continent?: InputMaybe<StringQueryOperatorInput>;
@@ -121,17 +126,26 @@ export type GetCountryQueryVariables = Exact<{
 
 export type GetCountryQuery = { country: Array<{ code: string, name: string, capital: string | null }> };
 
-export class TypedOperation<Result, Variables> {
+export type TypedOperation<Result, Variables> = {
+  readonly operation: string;
+  readonly operationType: "query" | "mutation" | "subscription";
   /**
    * This type is used to ensure that the variables you pass in to the query are assignable to Variables
    * and that the Result is assignable to whatever you pass your result to. The method is never actually
    * implemented, but the type is valid because we list it as optional
    */
   __apiType?: (variables: Variables) => Result;
+}
 
-  constructor(public readonly operation: string, public readonly operationType: "query" | "mutation" | "subscription") {}
-};
-    
-export const GetCountryDocument = new TypedOperation<GetCountryQuery, GetCountryQueryVariables>("getCountry", "query");
+export const GetCountryDocument: TypedOperation<GetCountryQuery, GetCountryQueryVariables> = { operation: "getCountry", operationType: "query" };
 
-export const OPERATIONS = [{"operationName":"getCountry","operationType":"query","query":"query getCountry($countryCode: String!) { country: countries(filter: {code: {eq: $countryCode}}) { capital code name } }","behaviour":{"ttl":30}}]
+export const OPERATIONS = [
+  {
+    "operationName": "getCountry",
+    "operationType": "query",
+    "query": "query getCountry($countryCode: String!) { country: countries(filter: {code: {eq: $countryCode}}) { capital code name } }",
+    "behaviour": {
+      "ttl": 30
+    }
+  }
+]

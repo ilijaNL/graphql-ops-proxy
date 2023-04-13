@@ -1,9 +1,13 @@
 import undici, { Pool } from 'undici';
-import { IncomingHttpHeaders } from 'undici/types/header';
+
 import { getHasuraHeaders } from './utils';
-import { OpsDef, ProxyResponse, RemoteRequestProps, Resolver, THeaders } from './proxy';
+import { OpsDef, ProxyResponse, RemoteRequestProps } from './proxy';
 import { createCache, Cache } from 'async-cache-dedupe';
 import stableJson from 'safe-stable-stringify';
+
+import type { IncomingHttpHeaders } from 'http';
+
+type Resolver = OpsDef['request'];
 
 export function createRequestPool(url: URL, options?: Pool.Options) {
   const poolOptions: Pool.Options = {
@@ -39,7 +43,7 @@ export function createRequestPool(url: URL, options?: Pool.Options) {
       const data = Buffer.concat(buffers);
 
       return {
-        headers: fetchResult.headers as THeaders,
+        headers: fetchResult.headers,
         response: data,
       };
     },
