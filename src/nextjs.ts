@@ -7,6 +7,7 @@ import {
   defaultHeaderCopy,
   fromGetRequest,
   fromPostRequest,
+  OnParseFn,
 } from './proxy';
 import { validateProxy } from './utils';
 
@@ -22,6 +23,37 @@ function setHeaders(headers: OutgoingHttpHeaders, res: ServerResponse) {
     if (value) {
       res.setHeader(key, value);
     }
+  });
+}
+
+export const defaultParseFn: OnParseFn<NextApiRequest> = (req) => {
+  if (req.method === 'POST') {
+    const body = req.body;
+    const payload = fromPostRequest(body);
+
+    return {
+      headers: req.headers,
+      operation: payload.operation,
+      variables: payload.variables,
+    };
+  }
+
+  if (req.method === 'GET') {
+    const payload = fromGetRequest(req.query as Record<string, string>);
+
+    return {
+      headers: req.headers,
+      operation: payload.operation,
+      variables: payload.variables,
+    };
+  }
+
+  throw new Error('method not supported');
+};
+
+function sendError(res: NextApiResponse, code: number, message: string) {
+  return res.status(code).send({
+    message: message,
   });
 }
 
@@ -57,7 +89,7 @@ export function createNextHandler(
      * @returns
      */
     onCreate: (proxy: GraphqlProxy) => void;
-
+    onParse: OnParseFn<NextApiRequest>;
     /**
      * Default only copies ['content-encoding', 'content-type'] headers
      * @param proxyHeaders
@@ -66,24 +98,25 @@ export function createNextHandler(
     resultHeaders: (proxyHeaders?: OutgoingHttpHeaders) => OutgoingHttpHeaders;
   }>
 ) {
-  let proxy: GraphqlProxy;
+  let mProxy: GraphqlProxy;
   if (typeof options?.request === 'function') {
-    proxy = createGraphqlProxy(operations, options.request);
+    mProxy = createGraphqlProxy(operations, options.request);
   } else {
     const requestPool = createRequestPool(url, options?.request);
-    proxy = createGraphqlProxy(operations, requestPool.request);
+    mProxy = createGraphqlProxy(operations, requestPool.request);
   }
 
-  const toResultHeaders = options?.resultHeaders ?? defaultHeaderCopy;
+  options?.onCreate?.(mProxy);
 
-  options?.onCreate?.(proxy);
+  const mToResultHeaders = options?.resultHeaders ?? defaultHeaderCopy;
+  const mOnParse = options?.onParse ?? defaultParseFn;
 
   if (options?.withCache) {
-    withCache(proxy.getOperations(), typeof options.withCache === 'object' ? options.withCache : {});
+    withCache(mProxy.getOperations(), typeof options.withCache === 'object' ? options.withCache : {});
   }
 
-  async function validateOps() {
-    const errors = await validateProxy(proxy, typeof options?.validate === 'object' ? options?.validate : {});
+  async function mValidateOps() {
+    const errors = await validateProxy(mProxy, typeof options?.validate === 'object' ? options?.validate : {});
     if (errors.length) {
       throw new Error(errors.map((e) => e.message).join(', '));
     }
@@ -91,53 +124,57 @@ export function createNextHandler(
 
   // what is a better location?
   if (options?.validate) {
-    validateOps();
+    mValidateOps();
   }
 
-  function sendNotFound(res: NextApiResponse, message: string) {
-    return res.status(404).send({
-      message: message,
-    });
-  }
-  async function _request(operation: string, variables: any, headers: IncomingHttpHeaders, res: NextApiResponse) {
+  async function rawRequest(
+    operation: string | undefined,
+    variables: any,
+    headers: IncomingHttpHeaders,
+    res: NextApiResponse
+  ) {
     if (!operation || typeof operation !== 'string') {
-      return sendNotFound(res, 'no operation defined');
+      return sendError(res, 404, 'no operation defined');
     }
 
     try {
-      const proxyResponse = await proxy.request(operation, variables, headers);
+      const proxyResponse = await mProxy.request(operation, variables, headers);
 
-      setHeaders(toResultHeaders(proxyResponse.headers), res);
+      setHeaders(mToResultHeaders(proxyResponse.headers), res);
 
       return res.send(proxyResponse.response);
-    } catch (e: unknown) {
+    } catch (e: any) {
       if (e instanceof NotFoundError) {
-        return sendNotFound(res, e.message);
+        return sendError(res, 404, e.message);
       }
 
       if (e instanceof ValidationError) {
-        return res.status(400).send({
-          message: e.message,
-        });
+        return sendError(res, 400, e.message);
       }
 
-      return res.status(500).send((e as Error).message ?? 'internal error');
+      return sendError(res, 500, e.message ?? 'internal error');
     }
   }
 
-  return async function handle(req: NextApiRequest, res: NextApiResponse) {
-    const headers = req.headers;
-    if (req.method === 'POST') {
-      const payload = fromPostRequest(req.body);
-      return _request(payload.operation as string, payload.variables, headers, res);
+  async function handle(req: NextApiRequest, res: NextApiResponse) {
+    try {
+      if (req.method === 'POST') {
+        const parsed = await mOnParse(req, mProxy);
+        return rawRequest(parsed.operation, parsed.variables, parsed.headers, res);
+      }
+
+      if (req.method === 'GET') {
+        const parsed = await mOnParse(req, mProxy);
+        return rawRequest(parsed.operation, parsed.variables, parsed.headers, res);
+      }
+
+      return sendError(res, 404, 'not-found');
+    } catch (e: any) {
+      return sendError(res, 500, e.message ?? 'internal error');
     }
+  }
 
-    if (req.method === 'GET') {
-      const payload = fromGetRequest(req.query as Record<string, string>);
+  handle.rawRequest = rawRequest;
 
-      return _request(payload.operation as string, payload.variables, headers, res);
-    }
-
-    return sendNotFound(res, 'not-found');
-  };
+  return handle;
 }

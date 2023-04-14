@@ -1,4 +1,4 @@
-import type { GraphQLError } from 'graphql';
+import { GraphQLError, getIntrospectionQuery, buildClientSchema, validate, parse, visit } from 'graphql';
 import { GraphqlProxy } from './proxy';
 import type { IncomingHttpHeaders } from 'http';
 
@@ -11,13 +11,38 @@ export function getHasuraHeaders(headers: Record<string, any>): Record<string, a
   }, {} as Record<string, any>);
 }
 
+function extractFromOperationFromQuery(query: string) {
+  const doc = parse(query);
+  let op = '';
+  visit(doc, {
+    OperationDefinition: {
+      enter(opDef) {
+        op = opDef.name?.value ?? '';
+      },
+    },
+  });
+
+  return op;
+}
+
+export function convertQueryToOperation(proxy: GraphqlProxy, body: any) {
+  const { query, operationName } = body;
+
+  const op: string = operationName ?? extractFromOperationFromQuery(query);
+
+  if (!op) {
+    throw new Error('could not resolve operationName from the body');
+  }
+
+  const opsDef = proxy.getOperation(op);
+
+  return opsDef.operationName;
+}
+
 export const validateProxy = async (proxy: GraphqlProxy, introspectionHeaders: IncomingHttpHeaders = {}) => {
   // fetch introspection
   // filter out custom executions
   const opsToCheck = proxy.getOperations().filter((o) => !o.customHandler);
-
-  // lazy load graphql
-  const { getIntrospectionQuery, buildClientSchema, validate, parse } = await import('graphql');
 
   if (opsToCheck.length === 0) {
     return [];

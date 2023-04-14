@@ -41,6 +41,14 @@ export function fromPostRequest(body: any): Partial<{ operation: string; variabl
   };
 }
 
+export type ParseResponse = {
+  operation?: string;
+  variables?: Record<string, any>;
+  headers: IncomingHttpHeaders;
+};
+
+export type OnParseFn<Req> = (req: Req, proxy: GraphqlProxy) => Promise<ParseResponse> | ParseResponse;
+
 export function fromGetRequest(query: Record<string, string>): ReturnType<typeof fromPostRequest> {
   const operation = query['op'] ?? query['operation'] ?? query['query'];
   const variables = query['v'] ?? query['variables'];
@@ -201,7 +209,7 @@ export function createGraphqlProxy(operations: Array<GeneratedOperation>, reques
     const doc = opsMap.get(operation);
     /* istanbul ignore next */
     if (!doc) {
-      throw new Error('no document registered for ' + operation);
+      throw new Error('no operation registered for ' + operation);
     }
 
     return doc;
