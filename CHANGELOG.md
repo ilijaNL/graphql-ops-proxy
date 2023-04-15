@@ -1,5 +1,11 @@
 # graphql-ops-proxy
 
+## 0.0.4
+
+### Patch Changes
+
+- aef1c64: OnParse method for edge & nextjs
+
 ## 0.0.3
 
 ### Patch Changes
