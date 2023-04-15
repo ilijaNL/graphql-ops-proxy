@@ -7,6 +7,7 @@ import {
   OpsDef,
   fromPostRequest,
   fromGetRequest,
+  OnParseFn,
 } from './proxy';
 
 // types imports
@@ -78,6 +79,33 @@ export function handleResponse(response: BodyInit, headers: OutgoingHttpHeaders,
   });
 }
 
+export const defaultParseFn: OnParseFn<Request> = async (req) => {
+  if (req.method === 'POST') {
+    const body = await req.json();
+    const payload = fromPostRequest(body);
+
+    return {
+      headers: toNodeHeaders(req.headers),
+      operation: payload.operation,
+      variables: payload.variables,
+    };
+  }
+
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const params = url.searchParams;
+    const payload = fromGetRequest(Object.fromEntries(params.entries()));
+
+    return {
+      headers: toNodeHeaders(req.headers),
+      operation: payload.operation,
+      variables: payload.variables,
+    };
+  }
+
+  throw new Error('method not supported');
+};
+
 /**
  * Create a graphql proxy handler
  */
@@ -92,6 +120,7 @@ export function createEdgeHandler(
   operations: Array<GeneratedOperation>,
   options?: Partial<{
     proxyHeaders: (headers: IncomingHttpHeaders) => IncomingHttpHeaders;
+    onParse: OnParseFn<Request>;
     onResponse: typeof handleResponse;
     /**
      * Can be used to add overrides or do other manu
@@ -101,30 +130,31 @@ export function createEdgeHandler(
     onCreate: (proxy: GraphqlProxy) => void;
   }>
 ) {
-  const req: RequestFn =
+  const mReq: RequestFn =
     typeof requestOrUrl === 'function'
       ? requestOrUrl
       : (props) => defaultRequest(requestOrUrl, props.body, props.headers);
 
-  const proxy = createGraphqlProxy(operations, req);
+  const mProxy = createGraphqlProxy(operations, mReq);
 
-  options?.onCreate?.(proxy);
+  options?.onCreate?.(mProxy);
 
-  const onResponse = options?.onResponse ?? handleResponse;
+  const mOnResponse = options?.onResponse ?? handleResponse;
+  const mOnParse = options?.onParse ?? defaultParseFn;
 
-  async function _request(operation: string, variables: any, inHeaders: Headers) {
+  async function rawRequest(operation: string | undefined, variables: any, inHeaders: IncomingHttpHeaders) {
     if (!operation || typeof operation !== 'string') {
       return sendError('no operation defined', 404);
     }
 
     try {
-      let headers = toNodeHeaders(inHeaders);
+      let headers = inHeaders;
       if (options?.proxyHeaders) {
         headers = options.proxyHeaders(headers);
       }
-      const res = await proxy.request<BodyInit>(operation, variables, headers);
-      const op = proxy.getOperation(operation);
-      return onResponse(res.response, res.headers ?? {}, op);
+      const res = await mProxy.request<BodyInit>(operation, variables, headers);
+      const op = mProxy.getOperation(operation);
+      return mOnResponse(res.response, res.headers ?? {}, op);
     } catch (e: unknown) {
       if (e instanceof NotFoundError) {
         return sendError(e.message, 404);
@@ -138,22 +168,25 @@ export function createEdgeHandler(
     }
   }
 
-  return async function handle(req: Request) {
-    if (req.method === 'POST') {
-      const result = await req.json();
-      const payload = fromPostRequest(result);
-      return _request(payload.operation as string, payload.variables, req.headers);
+  async function handle(req: Request) {
+    try {
+      if (req.method === 'POST') {
+        const parsed = await mOnParse(req, mProxy);
+
+        return rawRequest(parsed.operation, parsed.variables, parsed.headers);
+      }
+
+      if (req.method === 'GET') {
+        const parsed = await mOnParse(req, mProxy);
+        return rawRequest(parsed.operation as string, parsed.variables, parsed.headers);
+      }
+      return sendError('not-found', 404);
+    } catch (e: any) {
+      return sendError(e.message ?? 'internal error', 500);
     }
+  }
 
-    if (req.method === 'GET') {
-      const url = new URL(req.url);
-      const params = url.searchParams;
+  handle.rawRequest = rawRequest;
 
-      const payload = fromGetRequest(Object.fromEntries(params.entries()));
-
-      return _request(payload.operation as string, payload.variables, req.headers);
-    }
-
-    return sendError('not-found', 404);
-  };
+  return handle;
 }

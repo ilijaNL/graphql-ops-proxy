@@ -3,6 +3,7 @@ import { createMocks } from 'node-mocks-http';
 import { createNextHandler } from '../src/nextjs';
 import { print, parse } from 'graphql';
 import { TypedOperation, copyHeaders } from '../src/proxy';
+import { convertQueryToOperation } from '../src/utils';
 
 tap.test('happy post', async (t) => {
   const handler = createNextHandler(
@@ -321,4 +322,78 @@ tap.test('cache', async (t) => {
   await Promise.all([p1, p2]);
 
   t.same(m1.res._getData(), m2.res._getData());
+});
+
+tap.test('accept traditional query + variables', async (t) => {
+  const handler = createNextHandler(
+    new URL('http://localhost:3001/api/graphql'),
+    [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }],
+    {
+      withCache: {
+        cacheTTL: 1,
+      },
+      onParse: (req, proxy) => {
+        return {
+          headers: req.headers,
+          operation: convertQueryToOperation(proxy, req.body),
+          variables: req.body.variables,
+        };
+      },
+      request: async () => {
+        return {
+          response: {
+            data: {
+              test: 'success',
+            },
+          },
+        };
+      },
+    }
+  );
+
+  const m1 = createMocks({
+    method: 'POST',
+    headers: {
+      'x-hasura-app': 'app',
+    },
+    body: {
+      query: 'query test1 { test }',
+    },
+  });
+
+  await handler(m1.req, m1.res);
+
+  t.same(m1.res._getData(), { data: { test: 'success' } });
+
+  const m2 = createMocks({
+    method: 'POST',
+    headers: {
+      'x-hasura-app': 'app',
+    },
+    body: {
+      query: 'query test2 { test }',
+    },
+  });
+
+  await handler(m2.req, m2.res);
+  t.equal(m2.res._getStatusCode(), 500);
+  t.same(m2.res._getData(), {
+    message: 'no operation registered for test2',
+  });
+
+  const m3 = createMocks({
+    method: 'POST',
+    headers: {
+      'x-hasura-app': 'app',
+    },
+    body: {
+      query: 'query { test }',
+    },
+  });
+
+  await handler(m3.req, m3.res);
+  t.equal(m3.res._getStatusCode(), 500);
+  t.same(m3.res._getData(), {
+    message: 'could not resolve operationName from the body',
+  });
 });
