@@ -33,7 +33,7 @@ export interface IValidationError {
 }
 
 export function fromPostRequest(body: any): Partial<{ operation: string; variables: Record<string, any> }> {
-  const operation = body.op ?? body.operation ?? body.query;
+  const operation = body.op ?? body.operationName ?? body.operation ?? body.query;
   const variables = body.v ?? body.variables;
   return {
     operation,
@@ -173,6 +173,9 @@ export function createGraphqlProxy(operations: Array<GeneratedOperation>, reques
 
     const bodyPayload = JSON.stringify(requestBody);
 
+    // we since we generating new body ensure this header is not proxied through
+    delete props.headers['content-length'];
+
     const headers: IncomingHttpHeaders = {
       ...props.headers,
       // always expect json since this is for graphql...
@@ -185,7 +188,7 @@ export function createGraphqlProxy(operations: Array<GeneratedOperation>, reques
     // delete headers['keep-alive'];
     // delete headers['transfer-encoding'];
 
-    return await request({
+    return request({
       body: bodyPayload,
       headers: headers,
     });

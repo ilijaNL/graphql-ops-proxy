@@ -1,5 +1,11 @@
 # graphql-ops-proxy
 
+## 0.0.5
+
+### Patch Changes
+
+- Support operationName for post body parsing
+
 ## 0.0.4
 
 ### Patch Changes
