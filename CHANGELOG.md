@@ -1,5 +1,11 @@
 # graphql-ops-proxy
 
+## 1.0.0
+
+### Major Changes
+
+- 518bdbc: Rewrite the library and remove all node depend things
+
 ## 0.0.5
 
 ### Patch Changes
