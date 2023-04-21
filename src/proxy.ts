@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'http';
+import { Headers, Response } from '@whatwg-node/fetch';
 
 export type OperationType = 'query' | 'mutation' | 'subscription';
 

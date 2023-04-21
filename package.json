@@ -66,5 +66,8 @@
       "import": "./lib/edge.js"
     },
     "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@whatwg-node/fetch": "^0.8.5"
   }
 }
