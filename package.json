@@ -42,22 +42,12 @@
   "sideEffects": false,
   "devDependencies": {
     "@changesets/cli": "2.26.0",
-    "@graphql-tools/mock": "^8.7.19",
-    "@graphql-tools/schema": "^9.0.17",
-    "@sinclair/typebox": "^0.26.8",
     "@types/node": "^16.0.0",
     "@types/tap": "^15.0.8",
     "@typescript-eslint/eslint-plugin": "^5.58.0",
     "@typescript-eslint/parser": "^5.58.0",
-    "ajv": "^8.12.0",
-    "ajv-formats": "^2.1.1",
-    "async-cache-dedupe": "^1.10.2",
     "eslint": "^8.4.1",
     "eslint-config-prettier": "^8.4.0",
-    "graphql": "^16.6.0",
-    "next": "^13.2.4",
-    "node-mocks-http": "^1.12.2",
-    "safe-stable-stringify": "^2.4.3",
     "tap": "^16.3.4",
     "ts-node": "^10.7.0",
     "tsup": "^6.6.0",
@@ -70,25 +60,10 @@
       "require": "./lib/index.js",
       "import": "./lib/index.js"
     },
-    "./lib/nextjs": {
-      "types": "./lib/nextjs.d.ts",
-      "require": "./lib/nextjs.js",
-      "import": "./lib/nextjs.js"
-    },
     "./lib/edge": {
       "types": "./lib/edge.d.ts",
       "require": "./lib/edge.js",
       "import": "./lib/edge.js"
-    },
-    "./lib/node": {
-      "types": "./lib/node.d.ts",
-      "require": "./lib/node.js",
-      "import": "./lib/node.js"
-    },
-    "./lib/utils": {
-      "types": "./lib/utils.d.ts",
-      "require": "./lib/utils.js",
-      "import": "./lib/utils.js"
     },
     "./package.json": "./package.json"
   }

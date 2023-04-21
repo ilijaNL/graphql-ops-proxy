@@ -1,16 +1,19 @@
-import { createNextHandler } from 'graphql-ops-proxy/lib/nextjs';
 import { GeneratedOperation } from 'graphql-ops-proxy/lib/proxy';
+import { createEdgeHandler } from 'graphql-ops-proxy/lib/edge';
 import { OPERATIONS } from '../../__generated__/gql';
+import { createServerAdapter } from '@whatwg-node/server';
 
-const handler = createNextHandler(
-  new URL('https://countries.trevorblades.com'),
-  OPERATIONS as Array<GeneratedOperation>,
-  {
-    withCache: {
-      // global cache
-      cacheTTL: 0,
-    },
-  }
-);
+const origin = new URL('https://countries.trevorblades.com');
+const handler = createEdgeHandler(origin, OPERATIONS as Array<GeneratedOperation>, {
+  onResponse(response, { op }) {
+    if (op.mBehaviour.ttl) {
+      response.headers.set('cache-control', `public, s-maxage=${op.mBehaviour.ttl}`);
+    }
 
-export default handler;
+    return response;
+  },
+});
+
+const adapter = createServerAdapter(handler);
+
+export default adapter;
