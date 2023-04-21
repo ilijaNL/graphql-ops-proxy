@@ -1,4 +1,4 @@
-import type { OutgoingHttpHeaders, IncomingHttpHeaders } from 'http';
+import type { IncomingHttpHeaders } from 'http';
 
 export type OperationType = 'query' | 'mutation' | 'subscription';
 
@@ -10,27 +10,66 @@ export type TypedOperation<R = any, V = any> = {
 
 export type GeneratedOperation = {
   operationName: string;
-  operationType: 'query' | 'mutation' | 'subscription';
+  operationType: OperationType;
   query: string;
   behaviour: Partial<{
     ttl: number;
-  }>;
+  }> &
+    Record<string, any>;
+};
+
+export function toNodeHeaders(headers: Headers): IncomingHttpHeaders {
+  const result: IncomingHttpHeaders = {};
+  for (const [key, value] of headers) {
+    // see https://github.com/vercel/next.js/blob/1088b3f682cbe411be2d1edc502f8a090e36dee4/packages/next/src/server/web/utils.ts#L29 for a reference impl
+    // if (key.toLowerCase() === 'set-cookie') {
+    //   // We may have gotten a comma joined string of cookies, or multiple
+    //   // set-cookie headers. We need to merge them into one header array
+    //   // to represent all the cookies.
+    //   cookies.push(...splitCookiesString(value))
+    //   result[key] = cookies.length === 1 ? cookies[0] : cookies
+    // } else {
+    //   result[key] = value
+    // }
+
+    result[key] = value;
+  }
+  return result;
+}
+
+export const defaultParseFn: OnParseFn = async (req) => {
+  if (req.method === 'POST') {
+    const body = await req.json();
+    const payload = fromPostRequest(body);
+
+    return {
+      headers: new Headers(req.headers),
+      operation: payload.operation,
+      variables: payload.variables,
+    };
+  }
+
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const params = url.searchParams;
+    const payload = fromGetRequest(Object.fromEntries(params.entries()));
+
+    return {
+      headers: new Headers(req.headers),
+      operation: payload.operation,
+      variables: payload.variables,
+    };
+  }
+
+  throw new Error('method not supported');
 };
 
 export type RemoteRequestProps = {
   // used for the key
   query: string;
   variables?: Record<string, unknown>;
-  headers: IncomingHttpHeaders;
+  headers: Headers;
 };
-
-export type ProxyResponse<R = any> = { response: R; headers?: OutgoingHttpHeaders };
-export type RequestFn<R = any> = (props: { body: string; headers: IncomingHttpHeaders }) => Promise<ProxyResponse<R>>;
-
-export interface IValidationError {
-  type: 'validation';
-  message: string;
-}
 
 export function fromPostRequest(body: any): Partial<{ operation: string; variables: Record<string, any> }> {
   const operation = body.op ?? body.operationName ?? body.operation ?? body.query;
@@ -40,14 +79,6 @@ export function fromPostRequest(body: any): Partial<{ operation: string; variabl
     variables,
   };
 }
-
-export type ParseResponse = {
-  operation?: string;
-  variables?: Record<string, any>;
-  headers: IncomingHttpHeaders;
-};
-
-export type OnParseFn<Req> = (req: Req, proxy: GraphqlProxy) => Promise<ParseResponse> | ParseResponse;
 
 export function fromGetRequest(query: Record<string, string>): ReturnType<typeof fromPostRequest> {
   const operation = query['op'] ?? query['operation'] ?? query['query'];
@@ -59,50 +90,33 @@ export function fromGetRequest(query: Record<string, string>): ReturnType<typeof
   };
 }
 
+export type ParsedRequest = {
+  operation?: string;
+  variables?: Record<string, any>;
+  headers: Headers;
+};
+
+export type OnParseFn = (req: Request, proxy: GraphQLProxy) => Promise<ParsedRequest> | ParsedRequest;
+
 export class NotFoundError extends Error {}
-export class ValidationError extends Error {}
 
-export type ValidateFn<T> = (input: T, def: OpsDef) => Promise<void | IValidationError> | void | IValidationError;
-
-export type CustomHandlerFn<R, V> = (
-  this: OpsDef,
-  variables: V,
-  headers: IncomingHttpHeaders
-) => Promise<ProxyResponse<R>> | ProxyResponse<R>;
+const noOp = (props: RemoteRequestProps) => props;
+export type PreRequestHandler = (this: OpsDef, props: RemoteRequestProps) => RemoteRequestProps;
 
 export class OpsDef {
   private mOperation: OperationType;
+  private mPreHandler: PreRequestHandler = noOp;
 
   constructor(
     private mDocument: TypedOperation,
     private readonly mQuery: string,
-    public readonly request: (req: RemoteRequestProps) => Promise<ProxyResponse>,
+    public readonly request: (req: RemoteRequestProps) => Promise<Response>,
     public readonly mBehaviour: Partial<{
       ttl: number;
-    }> = {},
-    private mValidate: ValidateFn<any> | null = null,
-    private mCustomHandler: CustomHandlerFn<any, any> | null = null
+    }> = {}
   ) {
     this.mOperation = mDocument.operationType;
   }
-
-  public setValidate(validate: ValidateFn<any> | null) {
-    this.mValidate = validate?.bind(this) ?? null;
-  }
-
-  public setCustomHandler(customHandler: CustomHandlerFn<any, any> | null) {
-    this.mCustomHandler = customHandler?.bind(this) ?? null;
-  }
-
-  // public setDocument(document: DocumentNode) {
-  //   const op = getOperationAST(document);
-  //   if (!op) {
-  //     throw new Error('cannot set operation since not valid: ' + print(document));
-  //   }
-  //   this.mDocument = document;
-  //   this.mOperation = op;
-  //   this.mQuery = print(document);
-  // }
 
   get type() {
     return this.mOperation;
@@ -116,56 +130,38 @@ export class OpsDef {
     return this.mDocument.operation;
   }
 
-  get customHandler() {
-    return this.mCustomHandler;
+  public setPrehandler(preHandler: PreRequestHandler) {
+    this.mPreHandler = preHandler.bind(this);
   }
 
-  public async resolve(props: { variables?: Record<string, unknown>; headers: IncomingHttpHeaders }) {
-    // validate
-    if (this.mValidate) {
-      const error = await this.mValidate(props.variables, this);
-      if (error) {
-        throw new ValidationError(error.message);
-      }
-    }
-
-    if (this.mCustomHandler) {
-      const handlerResponse = await this.mCustomHandler(props.variables, props.headers);
-      const resp: ProxyResponse = {
-        response: {
-          // convert to data since this is what all graphql servers return
-          data: handlerResponse.response,
-        },
-        headers: handlerResponse.headers,
-      };
-
-      return resp;
-    }
-
-    return this.request({ headers: props.headers, query: this.mQuery, variables: props.variables });
+  public async resolve(props: { variables?: Record<string, unknown>; headers: Headers }) {
+    const requestBody = this.mPreHandler({ headers: props.headers, query: this.mQuery, variables: props.variables });
+    return await this.request(requestBody);
   }
 }
 
-export function copyHeaders(originalHeaders: IncomingHttpHeaders | OutgoingHttpHeaders, toCopy: string[]) {
-  const result: IncomingHttpHeaders = {};
-  Object.keys(originalHeaders).forEach((key) => {
-    if (toCopy.indexOf(key) !== -1) {
-      result[key] = originalHeaders[key] as string;
-    }
-  });
-  return result;
-}
+// export function copyHeaders(originalHeaders: IncomingHttpHeaders | OutgoingHttpHeaders, toCopy: string[]) {
+//   const result: IncomingHttpHeaders = {};
+//   Object.keys(originalHeaders).forEach((key) => {
+//     if (toCopy.indexOf(key) !== -1) {
+//       result[key] = originalHeaders[key] as string;
+//     }
+//   });
+//   return result;
+// }
 
-const defaultHeadersToCopy = ['content-encoding', 'content-type', 'content-length'];
+// const defaultHeadersToCopy = ['content-encoding', 'content-type', 'content-length'];
 
-export const defaultHeaderCopy = (proxyHeaders?: IncomingHttpHeaders | OutgoingHttpHeaders) => {
-  return copyHeaders(proxyHeaders ?? {}, defaultHeadersToCopy);
-};
+// export const defaultHeaderCopy = (proxyHeaders?: IncomingHttpHeaders | OutgoingHttpHeaders) => {
+//   return copyHeaders(proxyHeaders ?? {}, defaultHeadersToCopy);
+// };
 
-export type GraphqlProxy = ReturnType<typeof createGraphqlProxy>;
+export type GraphQLProxy = ReturnType<typeof createGraphqlProxy>;
+
+export type RequestFn = (props: { body: string; headers: Headers }) => Promise<Response>;
 
 export function createGraphqlProxy(operations: Array<GeneratedOperation>, request: RequestFn) {
-  async function _requestRemote(props: RemoteRequestProps): Promise<ProxyResponse> {
+  async function _requestRemote(props: RemoteRequestProps): Promise<Response> {
     const requestBody = {
       query: props.query,
       variables: props.variables,
@@ -174,23 +170,18 @@ export function createGraphqlProxy(operations: Array<GeneratedOperation>, reques
     const bodyPayload = JSON.stringify(requestBody);
 
     // we since we generating new body ensure this header is not proxied through
-    delete props.headers['content-length'];
+    props.headers.delete('content-length');
 
-    const headers: IncomingHttpHeaders = {
-      ...props.headers,
-      // always expect json since this is for graphql...
-      'content-type': 'application/json',
-    };
+    props.headers.set('content-type', 'application/json');
+    props.headers.set('accept', 'application/json');
 
-    // remove forbidden headers
-    delete headers.host; // not sure if we should delete this header
-    delete headers.connection;
-    // delete headers['keep-alive'];
-    // delete headers['transfer-encoding'];
+    props.headers.delete('host');
+    props.headers.delete('connection');
+    props.headers.delete('keep-alive');
 
     return request({
       body: bodyPayload,
-      headers: headers,
+      headers: props.headers,
     });
   }
 
@@ -225,41 +216,28 @@ export function createGraphqlProxy(operations: Array<GeneratedOperation>, reques
       return Array.from(opsMap.values());
     },
     /**
-     * Add input validation for an operation
+     * Ability to override the request params for an operation
+     * @param name
+     * @param handler
      */
-    addValidation<V>(document: TypedOperation<any, V>, validate: ValidateFn<V>) {
-      const ops = getOperation(document.operation);
-      ops.setValidate(validate);
+    setPreHandler(operationName: string, handler: PreRequestHandler) {
+      const ops = getOperation(operationName);
+      ops.setPrehandler(handler);
     },
-    /**
-     * Add an operation override. Can be used to implement custom operations
-     */
-    addOverride<R, V>(document: TypedOperation<R, V>, handler: CustomHandlerFn<R, V>) {
-      const ops = getOperation(document.operation);
-      ops.setCustomHandler(handler);
-    },
-    /**
-     * Directly call proxy without any validation, caching or overrides
-     */
-    // async rawRequest(query: string, variables: Record<string, unknown> | undefined, headers: THeaders) {
-    //   return _requestRemote({ headers, query, variables });
-    // },
-
     /**
      * Send a request
      */
-    async request<R = any>(
+    async request(
       operationName: string,
       variables: Record<string, unknown> | undefined = undefined,
-      headers: IncomingHttpHeaders = {}
-    ): Promise<ProxyResponse<R>> {
+      headers: Headers = new Headers()
+    ): Promise<Response> {
       const def = opsMap.get(operationName);
       if (!def) {
         throw new NotFoundError('operation ' + operationName + ' not found');
       }
 
       const result = await def.resolve({ variables, headers });
-
       return result;
     },
   };

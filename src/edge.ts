@@ -1,65 +1,24 @@
 import {
   NotFoundError,
-  ValidationError,
   GeneratedOperation,
   createGraphqlProxy,
-  defaultHeaderCopy,
-  OpsDef,
-  fromPostRequest,
-  fromGetRequest,
   OnParseFn,
+  defaultParseFn,
+  OpsDef,
+  ParsedRequest,
 } from './proxy';
 
 // types imports
-import type { GraphqlProxy, RequestFn } from './proxy';
-import type { IncomingHttpHeaders, OutgoingHttpHeaders } from 'http';
+import type { GraphQLProxy, RequestFn } from './proxy';
 
-export function toNodeHeaders(headers: Headers): IncomingHttpHeaders {
-  const result: IncomingHttpHeaders = {};
-  for (const [key, value] of headers) {
-    // see https://github.com/vercel/next.js/blob/1088b3f682cbe411be2d1edc502f8a090e36dee4/packages/next/src/server/web/utils.ts#L29
-    // if (key.toLowerCase() === 'set-cookie') {
-    //   // We may have gotten a comma joined string of cookies, or multiple
-    //   // set-cookie headers. We need to merge them into one header array
-    //   // to represent all the cookies.
-    //   cookies.push(...splitCookiesString(value))
-    //   result[key] = cookies.length === 1 ? cookies[0] : cookies
-    // } else {
-    //   result[key] = value
-    // }
-
-    result[key] = value;
-  }
-  return result;
-}
-
-export function fromNodeHeaders(object: OutgoingHttpHeaders): Headers {
-  const headers = new Headers();
-  for (const [key, value] of Object.entries(object)) {
-    const values = Array.isArray(value) ? value : [value];
-    for (let v of values) {
-      if (typeof v === 'undefined') continue;
-      if (typeof v === 'number') {
-        v = v.toString();
-      }
-
-      headers.append(key, v);
-    }
-  }
-  return headers;
-}
-
-export async function defaultRequest(url: URL, body: string, headers: IncomingHttpHeaders) {
+export async function defaultRequest(url: URL, body: string, headers: Headers) {
   const r = await fetch(url.toString(), {
-    headers: fromNodeHeaders(headers),
+    headers: headers,
     method: 'POST',
     body: body,
   });
 
-  return {
-    response: r.body,
-    headers: defaultHeaderCopy(toNodeHeaders(r.headers)),
-  };
+  return r;
 }
 
 function sendError(message: string, code: number) {
@@ -70,41 +29,6 @@ function sendError(message: string, code: number) {
     { status: code }
   );
 }
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function handleResponse(response: BodyInit, headers: OutgoingHttpHeaders, _op: OpsDef) {
-  return new Response(response, {
-    status: 200,
-    headers: fromNodeHeaders(headers),
-  });
-}
-
-export const defaultParseFn: OnParseFn<Request> = async (req) => {
-  if (req.method === 'POST') {
-    const body = await req.json();
-    const payload = fromPostRequest(body);
-
-    return {
-      headers: toNodeHeaders(req.headers),
-      operation: payload.operation,
-      variables: payload.variables,
-    };
-  }
-
-  if (req.method === 'GET') {
-    const url = new URL(req.url);
-    const params = url.searchParams;
-    const payload = fromGetRequest(Object.fromEntries(params.entries()));
-
-    return {
-      headers: toNodeHeaders(req.headers),
-      operation: payload.operation,
-      variables: payload.variables,
-    };
-  }
-
-  throw new Error('method not supported');
-};
 
 /**
  * Create a graphql proxy handler
@@ -119,15 +43,23 @@ export function createEdgeHandler(
    */
   operations: Array<GeneratedOperation>,
   options?: Partial<{
-    proxyHeaders: (headers: IncomingHttpHeaders) => IncomingHttpHeaders;
-    onParse: OnParseFn<Request>;
-    onResponse: typeof handleResponse;
+    proxyHeaders: (headers: Headers) => Headers;
+    /**
+     * Can be used to add additiona headers etc
+     * @param response
+     * @returns
+     */
+    onResponse: (
+      response: Response,
+      props: { op: OpsDef; originHeaders: Headers; parsedRequest: ParsedRequest; proxy: GraphQLProxy }
+    ) => Response;
+    onParse: OnParseFn;
     /**
      * Can be used to add overrides or do other manu
      * @param proxy
      * @returns
      */
-    onCreate: (proxy: GraphqlProxy) => void;
+    onCreate: (proxy: GraphQLProxy) => void;
   }>
 ) {
   const mReq: RequestFn =
@@ -138,33 +70,49 @@ export function createEdgeHandler(
   const mProxy = createGraphqlProxy(operations, mReq);
 
   options?.onCreate?.(mProxy);
-
-  const mOnResponse = options?.onResponse ?? handleResponse;
   const mOnParse = options?.onParse ?? defaultParseFn;
 
-  async function rawRequest(operation: string | undefined, variables: any, inHeaders: IncomingHttpHeaders) {
+  async function rawRequest(parsedRequest: ParsedRequest) {
+    const { operation, variables } = parsedRequest;
     if (!operation || typeof operation !== 'string') {
       return sendError('no operation defined', 404);
     }
 
     try {
-      let headers = inHeaders;
+      let headers = parsedRequest.headers;
       if (options?.proxyHeaders) {
         headers = options.proxyHeaders(headers);
       }
-      const res = await mProxy.request<BodyInit>(operation, variables, headers);
-      const op = mProxy.getOperation(operation);
-      return mOnResponse(res.response, res.headers ?? {}, op);
+
+      const result = await mProxy.request(operation, variables, headers);
+      const resultHeaders = new Headers({
+        'content-type': result.headers.get('content-type') ?? 'application/json',
+      });
+
+      const response = new Response(result.body, {
+        headers: resultHeaders,
+        status: result.status,
+        statusText: result.statusText,
+      });
+
+      // somehow this is autoAssigned in different envs such as cloudflare workers
+      response.headers.delete('content-length');
+
+      return options?.onResponse
+        ? options.onResponse(response, {
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            op: mProxy.getOperation(operation)!,
+            originHeaders: result.headers,
+            parsedRequest: parsedRequest,
+            proxy: mProxy,
+          })
+        : response;
     } catch (e: unknown) {
       if (e instanceof NotFoundError) {
         return sendError(e.message, 404);
       }
 
-      if (e instanceof ValidationError) {
-        return sendError(e.message, 400);
-      }
-
-      return sendError((e as Error).message ?? 'internal error', 500);
+      throw e;
     }
   }
 
@@ -172,13 +120,12 @@ export function createEdgeHandler(
     try {
       if (req.method === 'POST') {
         const parsed = await mOnParse(req, mProxy);
-
-        return rawRequest(parsed.operation, parsed.variables, parsed.headers);
+        return await rawRequest(parsed);
       }
 
       if (req.method === 'GET') {
         const parsed = await mOnParse(req, mProxy);
-        return rawRequest(parsed.operation as string, parsed.variables, parsed.headers);
+        return await rawRequest(parsed);
       }
       return sendError('not-found', 404);
     } catch (e: any) {

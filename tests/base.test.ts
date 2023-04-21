@@ -1,82 +1,31 @@
 import tap from 'tap';
-import { TypedOperation, createGraphqlProxy } from '../src/proxy';
-import { validateProxy } from '../src/utils';
-import { Type, TSchema, Static } from '@sinclair/typebox';
-import { makeExecutableSchema } from '@graphql-tools/schema';
-import { addMocksToSchema } from '@graphql-tools/mock';
-import { graphql } from 'graphql';
-import addFormats from 'ajv-formats';
-import Ajv from 'ajv/dist/2019';
+import { createGraphqlProxy } from '../src/proxy';
+import type { IncomingHttpHeaders } from 'http';
 
-const ajv = addFormats(new Ajv({}), [
-  'date-time',
-  'time',
-  'date',
-  'email',
-  'hostname',
-  'ipv4',
-  'ipv6',
-  'uri',
-  'uri-reference',
-  'uuid',
-  'uri-template',
-  'json-pointer',
-  'relative-json-pointer',
-  'regex',
-])
-  .addKeyword('kind')
-  .addKeyword('modifier');
+export function toNodeHeaders(headers: Headers): IncomingHttpHeaders {
+  const result: IncomingHttpHeaders = {};
+  for (const [key, value] of headers) {
+    // see https://github.com/vercel/next.js/blob/1088b3f682cbe411be2d1edc502f8a090e36dee4/packages/next/src/server/web/utils.ts#L29
+    // if (key.toLowerCase() === 'set-cookie') {
+    //   // We may have gotten a comma joined string of cookies, or multiple
+    //   // set-cookie headers. We need to merge them into one header array
+    //   // to represent all the cookies.
+    //   cookies.push(...splitCookiesString(value))
+    //   result[key] = cookies.length === 1 ? cookies[0] : cookies
+    // } else {
+    //   result[key] = value
+    // }
 
-export const createValidateFn = <T extends TSchema>(schema: T) => {
-  const validate = ajv.compile<Static<T>>(schema);
-  return validate;
-};
-const schema = makeExecutableSchema({
-  typeDefs: `
-    type Query {
-      test: String!
-    }
-
-    type Mutation {
-      create: String!
-    }
-`,
-});
-
-const schemaWithMocks = addMocksToSchema({ schema });
-
-tap.test('happy', async (t) => {
-  const proxy = createGraphqlProxy([], async () => ({ headers: {}, response: null }));
-  const errors = await validateProxy(proxy);
-
-  t.same(errors, []);
-});
-
-tap.test('return errors when not all operations are implemented', async (t) => {
-  const proxy = createGraphqlProxy(
-    [{ behaviour: {}, operationName: 'test', query: 'query test { me }', operationType: 'query' }],
-    async ({ body }) => {
-      const source = JSON.parse(body).query;
-      const data = await graphql({
-        schema: schemaWithMocks,
-        source: source,
-      });
-
-      return {
-        response: data,
-      };
-    }
-  );
-  const errors = await validateProxy(proxy);
-
-  t.equal(errors[0]?.message, 'Cannot query field "me" on type "Query".');
-});
+    result[key] = value;
+  }
+  return result;
+}
 
 tap.test('rejects when not found', async (t) => {
   t.plan(1);
 
-  const proxy = createGraphqlProxy([], async () => ({ headers: {}, response: null }));
-  t.rejects(proxy.request('does-not-exists', { var1: 'var2' }, { header: 'head1' }));
+  const proxy = createGraphqlProxy([], async () => new Response(null, { headers: {} }));
+  t.rejects(proxy.request('does-not-exists', { var1: 'var2' }, new Headers({ header: 'head1' })));
 });
 
 tap.test('calls remote', async (t) => {
@@ -84,62 +33,94 @@ tap.test('calls remote', async (t) => {
 
   const ops = [{ behaviour: {}, operationName: 'test', operationType: 'query', query: 'query test { test }' }] as const;
 
-  const proxy = createGraphqlProxy([...ops], async ({ body, headers }) => {
-    const input = JSON.parse(body);
+  const proxy = createGraphqlProxy([...ops], async (props) => {
+    const input = JSON.parse(props.body);
 
     t.match(input.query, ops[0].query);
     t.same(input.variables, { var1: 'var2' });
-    t.equal((headers as Record<string, string>)['header'], 'head1');
+    t.equal(toNodeHeaders(props.headers)['header'], 'head1');
 
-    return {
-      response: {
-        data: {
-          me: 123,
-        },
-      },
-    };
+    return new Response(JSON.stringify({ data: { me: 123 } }));
   });
 
-  const result = await proxy.request('test', { var1: 'var2' }, { header: 'head1' });
+  const result = await proxy.request('test', { var1: 'var2' }, new Headers({ header: 'head1' }));
   // it returns as a buffer
-  const response = result.response;
-  t.same(response.data, { me: 123 });
+  const response = await result.json();
+  t.same(response, { data: { me: 123 } });
 });
 
-tap.test('validates', async (t) => {
-  t.plan(4);
-  const proxy = createGraphqlProxy(
-    [{ behaviour: {}, operationName: 'operation', operationType: 'query', query: 'query operation { me }' }],
-    async () => ({ headers: {}, response: null })
-  );
+tap.test('get operation', async (t) => {
+  const ops = [
+    {
+      behaviour: {
+        ttl: 3,
+      },
+      operationName: 'test',
+      operationType: 'query',
+      query: 'query test { test }',
+    },
+  ] as const;
 
-  const op: TypedOperation = { operation: 'operation', operationType: 'query' };
+  const proxy = createGraphqlProxy([...ops], async () => new Response(null, { headers: {} }));
 
-  proxy.addOverride(op, async () => {
-    await new Promise((resolve) => setTimeout(resolve, 10));
+  t.throws(() => proxy.getOperation('testtt'));
+
+  const def = proxy.getOperation('test');
+  t.equal(def.operationName, ops[0].operationName);
+  t.equal(def.query, ops[0].query);
+  t.equal(def.mBehaviour.ttl, ops[0].behaviour.ttl);
+  t.equal(def.type, 'query');
+});
+
+tap.test('calls operation preHandler', async (t) => {
+  t.plan(5);
+
+  const ops = [{ behaviour: {}, operationName: 'test', operationType: 'query', query: 'query test { test }' }] as const;
+
+  const proxy = createGraphqlProxy([...ops], async (props) => {
+    const input = JSON.parse(props.body);
+
+    t.match(input.query, ops[0].query);
+    t.same(input.variables, { var2: 'var1' });
+    t.equal(toNodeHeaders(props.headers)['header'], 'head1');
+
+    return new Response(JSON.stringify({ data: { me: 123 } }));
+  });
+
+  proxy.setPreHandler('test', (props) => {
+    t.equal(props.query, ops[0].query);
     return {
-      response: {
-        me: 222,
+      ...props,
+      headers: props.headers,
+      variables: {
+        var2: 'var1',
       },
     };
   });
 
-  const validateFn = createValidateFn(Type.Object({ var1: Type.String({ minLength: 3 }) }));
+  const result = await proxy.request('test', { var1: 'var2' }, new Headers({ header: 'head1' }));
+  // it returns as a buffer
+  const response = await result.json();
+  t.same(response, { data: { me: 123 } });
+});
 
-  proxy.addValidation(op, async (input) => {
-    t.pass('called');
-    const isValid = validateFn(input);
-    if (isValid) {
-      return;
-    }
-    return {
-      type: 'validation',
-      message: 'notvalid',
-    };
+tap.test('removes headers', async (t) => {
+  t.plan(1);
+  const ops = [{ behaviour: {}, operationName: 'test', operationType: 'query', query: 'query test { test }' }] as const;
+
+  const proxy = createGraphqlProxy([...ops], async (props) => {
+    t.same(toNodeHeaders(props.headers), {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      authorization: 'auth2123',
+    });
+
+    return new Response(JSON.stringify({ data: { me: 123 } }));
   });
 
-  const p2 = await proxy.request('operation', { var1: 'abcd' }, {});
-  t.equal(p2.response.data.me, 222);
-
-  t.rejects(proxy.request('operation', { var1: 'a' }, {}));
+  await proxy.request(
+    'test',
+    { var1: 'var2' },
+    new Headers({ 'content-length': '123', host: 'http:', connection: 'keep-alive', authorization: 'auth2123' })
+  );
 });
