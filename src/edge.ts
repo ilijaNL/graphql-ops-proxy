@@ -7,7 +7,7 @@ import {
   OpsDef,
   ParsedRequest,
 } from './proxy';
-
+import { Headers, Response } from '@whatwg-node/fetch';
 // types imports
 import type { GraphQLProxy, RequestFn } from './proxy';
 

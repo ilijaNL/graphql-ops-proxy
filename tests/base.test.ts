@@ -1,6 +1,7 @@
 import tap from 'tap';
 import { createGraphqlProxy } from '../src/proxy';
 import type { IncomingHttpHeaders } from 'http';
+import { Headers, Response } from '@whatwg-node/fetch';
 
 export function toNodeHeaders(headers: Headers): IncomingHttpHeaders {
   const result: IncomingHttpHeaders = {};

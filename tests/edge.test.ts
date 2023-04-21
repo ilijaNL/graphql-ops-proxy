@@ -1,16 +1,19 @@
 import tap from 'tap';
 import { createEdgeHandler } from '../src/edge';
 import { defaultParseFn, toNodeHeaders } from '../src/proxy';
+import { Headers, Response, Request } from '@whatwg-node/fetch';
 
 tap.test('happy post', async (t) => {
   const handler = createEdgeHandler(
     async ({ headers }) => {
       return new Response(
-        JSON.stringify({
-          data: {
-            test: '123',
-          },
-        }),
+        Buffer.from(
+          JSON.stringify({
+            data: {
+              test: '123',
+            },
+          })
+        ),
         {
           headers,
         }
@@ -40,11 +43,13 @@ tap.test('happy post', async (t) => {
 tap.test('wrong operation', async (t) => {
   const handler = createEdgeHandler(async () => {
     return new Response(
-      JSON.stringify({
-        data: {
-          test1: '123',
-        },
-      })
+      Buffer.from(
+        JSON.stringify({
+          data: {
+            test1: '123',
+          },
+        })
+      )
     );
   }, [{ behaviour: {}, operationName: 'test1', operationType: 'query', query: 'query test1 { test }' }]);
 
@@ -83,11 +88,13 @@ tap.test('happy get', async (t) => {
   const handler = createEdgeHandler(
     async ({ headers }) => {
       return new Response(
-        JSON.stringify({
-          data: {
-            test: '123',
-          },
-        }),
+        Buffer.from(
+          JSON.stringify({
+            data: {
+              test: '123',
+            },
+          })
+        ),
         {
           headers,
         }
@@ -119,11 +126,13 @@ tap.test('only accept post/get', async (t) => {
   const handler = createEdgeHandler(
     async ({ headers }) => {
       return new Response(
-        JSON.stringify({
-          data: {
-            test: '123',
-          },
-        }),
+        Buffer.from(
+          JSON.stringify({
+            data: {
+              test: '123',
+            },
+          })
+        ),
         {
           headers,
         }
@@ -153,11 +162,13 @@ tap.test('options', async (t) => {
       t.equal(headers.get('x-secret'), 'secret');
       t.equal(headers.get('x-exclude'), null);
       return new Response(
-        JSON.stringify({
-          data: {
-            test: '123',
-          },
-        }),
+        Buffer.from(
+          JSON.stringify({
+            data: {
+              test: '123',
+            },
+          })
+        ),
         {
           headers,
         }
@@ -198,11 +209,13 @@ tap.test('modify response headers', async (t) => {
   const handler = createEdgeHandler(
     async () => {
       return new Response(
-        JSON.stringify({
-          data: {
-            test: 'success',
-          },
-        }),
+        Buffer.from(
+          JSON.stringify({
+            data: {
+              test: 'success',
+            },
+          })
+        ),
         {
           headers: new Headers({
             header1: 'abc',
@@ -232,7 +245,7 @@ tap.test('modify response headers', async (t) => {
 
   t.same(await res1.json(), { data: { test: 'success' } });
   t.same(toNodeHeaders(res1.headers), {
-    'content-type': 'text/plain;charset=UTF-8',
+    'content-type': 'application/json',
     header1: 'abc11',
   });
 });
@@ -270,11 +283,13 @@ tap.test('happy post', async (t) => {
   const handler = createEdgeHandler(
     async ({ headers }) => {
       return new Response(
-        JSON.stringify({
-          data: {
-            test: '123',
-          },
-        }),
+        Buffer.from(
+          JSON.stringify({
+            data: {
+              test: '123',
+            },
+          })
+        ),
         {
           headers,
         }
